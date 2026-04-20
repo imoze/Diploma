@@ -1,12 +1,10 @@
-import uuid
 from sqlalchemy import (
     Column, Text, Integer, BigInteger, Date, Boolean,
     ForeignKey, DateTime, Float, Enum,
-    CheckConstraint, UniqueConstraint, Index
+    CheckConstraint, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
-
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
@@ -15,7 +13,7 @@ Base = declarative_base()
 # ---------------- ENUM ----------------
 
 source_enum = Enum(
-    "None", "Fav", "Search", "Recomendations",
+    "None", "Fav", "Search", "Recommendations",
     "Album", "Playlist", "Artist",
     name="source_enum",
     create_type=False
@@ -32,15 +30,13 @@ class Track(Base):
     release_date = Column(Date, nullable=False)
 
     duration = Column(Integer, nullable=False)
-    __table_args__ = (
-        CheckConstraint("duration > 0"),
-    )
+    __table_args__ = (CheckConstraint("duration > 0"),)
 
     likes = Column(BigInteger, default=0, nullable=False)
     plays = Column(BigInteger, default=0, nullable=False)
 
-    parts_plays = Column(Vector(100))
     feature_vector = Column(Vector(150))
+    track_path = Column(Text, nullable=False)
 
     history = relationship("History", back_populates="track", lazy="selectin")
 
@@ -117,13 +113,10 @@ class Playlist(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True)
     name = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime, nullable=False)
 
     duration = Column(Integer, nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("duration > 0"),
-    )
+    __table_args__ = (CheckConstraint("duration > 0"),)
 
     likes = Column(BigInteger, default=0, nullable=False)
     plays = Column(BigInteger, default=0, nullable=False)
@@ -156,10 +149,7 @@ class Album(Base):
     release_date = Column(Date, nullable=False)
 
     duration = Column(Integer, nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("duration > 0"),
-    )
+    __table_args__ = (CheckConstraint("duration > 0"),)
 
     likes = Column(BigInteger, default=0, nullable=False)
     plays = Column(BigInteger, default=0, nullable=False)
@@ -217,26 +207,57 @@ class Artist(Base):
 class History(Base):
     __tablename__ = "history"
 
-    time = Column(DateTime(timezone=True), primary_key=True)
+    time = Column(DateTime, primary_key=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
     track_id = Column(UUID(as_uuid=True), ForeignKey("track.id"), primary_key=True)
 
     completion_percent = Column(Float, nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("completion_percent >= 0 AND completion_percent <= 1"),
-        Index("ix_history_user", "user_id"),
-        Index("ix_history_track", "track_id"),
-    )
+    __table_args__ = (CheckConstraint("completion_percent >= 0 AND completion_percent <= 1"),)
 
     source = Column(source_enum, nullable=False)
-    source_details = Column(JSONB, default=dict)
+    source_details = Column(JSONB)
 
     user = relationship("Users", back_populates="history")
     track = relationship("Track", back_populates="history")
 
 
-# ---------------- MEMBER / ADMIN ----------------
+# ---------------- OTHER ----------------
+
+class Role(Base):
+    __tablename__ = "role"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    name = Column(Text, nullable=False)
+
+    member_links = relationship("MemberRoles", back_populates="role")
+    artist_links = relationship("ArtistMembers", back_populates="role")
+
+
+class Privilege(Base):
+    __tablename__ = "privilege"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    function_procedure = Column(Text, nullable=False)
+
+    admin_links = relationship("AdminPrivileges", back_populates="privilege")
+
+
+class Log(Base):
+    __tablename__ = "log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("admin.id"))
+
+    action = Column(Text, nullable=False)
+    table_name = Column(Text, nullable=False)
+
+    previous_value = Column(JSONB, nullable=False)
+    new_value = Column(JSONB, nullable=False)
+
+    datetime = Column(DateTime)
+
+    admin = relationship("Admin", back_populates="logs")
+
 
 class Member(Base):
     __tablename__ = "member"
@@ -250,16 +271,8 @@ class Member(Base):
     biography = Column(Text)
 
     user = relationship("Users", back_populates="member")
-    artist_links = relationship("ArtistMembers", back_populates="member", passive_deletes=True, lazy="selectin")
-    roles = relationship("MemberRoles", back_populates="member", passive_deletes=True, lazy="selectin")
-
-    @property
-    def artists(self):
-        return [l.artist for l in self.artist_links]
-
-    @property
-    def roles_list(self):
-        return [l.role for l in self.roles]
+    artist_links = relationship("ArtistMembers", back_populates="member", passive_deletes=True)
+    roles = relationship("MemberRoles", back_populates="member", passive_deletes=True)
 
 
 class Admin(Base):
@@ -275,28 +288,153 @@ class Admin(Base):
     dismissal_date = Column(Date)
 
     user = relationship("Users", back_populates="admin")
-    logs = relationship("Log", back_populates="admin", passive_deletes=True, lazy="selectin")
-    privileges = relationship("AdminPrivileges", back_populates="admin", passive_deletes=True, lazy="selectin")
-
-    @property
-    def privileges_list(self):
-        return [l.privilege for l in self.privileges]
+    logs = relationship("Log", back_populates="admin")
+    privileges = relationship("AdminPrivileges", back_populates="admin")
 
 
 # ---------------- ASSOCIATION ----------------
 
+class FavTracks(Base):
+    __tablename__ = "fav_tracks"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("track.id", ondelete="CASCADE"), primary_key=True)
+    idx = Column(Integer, nullable=False)
+
+    user = relationship("Users", back_populates="fav_tracks")
+    track = relationship("Track", back_populates="fav_links")
+
+
+class FavPlaylists(Base):
+    __tablename__ = "fav_playlists"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    playlist_id = Column(UUID(as_uuid=True), ForeignKey("playlist.id", ondelete="CASCADE"), primary_key=True)
+    idx = Column(Integer, nullable=False)
+
+    user = relationship("Users", back_populates="fav_playlists")
+    playlist = relationship("Playlist", back_populates="fav_links")
+
+
+class FavAlbums(Base):
+    __tablename__ = "fav_albums"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    album_id = Column(UUID(as_uuid=True), ForeignKey("album.id", ondelete="CASCADE"), primary_key=True)
+    idx = Column(Integer, nullable=False)
+
+    user = relationship("Users", back_populates="fav_albums")
+    album = relationship("Album", back_populates="fav_links")
+
+
+class FavArtists(Base):
+    __tablename__ = "fav_artists"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    artist_id = Column(UUID(as_uuid=True), ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True)
+    idx = Column(Integer, nullable=False)
+
+    user = relationship("Users", back_populates="fav_artists")
+    artist = relationship("Artist", back_populates="fav_links")
+
+
+class UserPlaylists(Base):
+    __tablename__ = "user_playlists"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    playlist_id = Column(UUID(as_uuid=True), ForeignKey("playlist.id", ondelete="CASCADE"), primary_key=True)
+
+    idx = Column(Integer, nullable=False)
+    is_feat = Column(Boolean, nullable=False)
+
+    user = relationship("Users", back_populates="playlists")
+    playlist = relationship("Playlist", back_populates="user_links")
+
+
 class PlaylistTracks(Base):
     __tablename__ = "playlist_tracks"
 
-    playlist_id = Column(UUID(as_uuid=True), ForeignKey("playlist.id"), primary_key=True)
-    track_id = Column(UUID(as_uuid=True), ForeignKey("track.id"), primary_key=True)
+    playlist_id = Column(UUID(as_uuid=True), ForeignKey("playlist.id", ondelete="CASCADE"), primary_key=True)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("track.id", ondelete="CASCADE"), primary_key=True)
 
     idx = Column(Integer, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("playlist_id", "idx"),
-        Index("ix_playlist_tracks_playlist", "playlist_id"),
-    )
-
     playlist = relationship("Playlist", back_populates="track_links")
     track = relationship("Track", back_populates="playlist_links")
+
+
+class AlbumTracks(Base):
+    __tablename__ = "album_tracks"
+
+    album_id = Column(UUID(as_uuid=True), ForeignKey("album.id", ondelete="CASCADE"), primary_key=True)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("track.id", ondelete="CASCADE"), primary_key=True)
+
+    idx = Column(Integer, nullable=False)
+
+    album = relationship("Album", back_populates="track_links")
+    track = relationship("Track", back_populates="album_links")
+
+
+class ArtistTracks(Base):
+    __tablename__ = "artist_tracks"
+
+    artist_id = Column(UUID(as_uuid=True), ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True)
+    track_id = Column(UUID(as_uuid=True), ForeignKey("track.id", ondelete="CASCADE"), primary_key=True)
+
+    idx = Column(Integer, nullable=False)
+    is_feat = Column(Boolean, nullable=False)
+
+    artist = relationship("Artist", back_populates="track_links")
+    track = relationship("Track", back_populates="artist_links")
+
+
+class ArtistAlbums(Base):
+    __tablename__ = "artist_albums"
+
+    artist_id = Column(UUID(as_uuid=True), ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True)
+    album_id = Column(UUID(as_uuid=True), ForeignKey("album.id", ondelete="CASCADE"), primary_key=True)
+
+    idx = Column(Integer, nullable=False)
+    is_feat = Column(Boolean, nullable=False)
+
+    artist = relationship("Artist", back_populates="album_links")
+    album = relationship("Album", back_populates="artist_links")
+
+
+class ArtistMembers(Base):
+    __tablename__ = "artist_members"
+
+    artist_id = Column(UUID(as_uuid=True), ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
+
+    role_id = Column(UUID(as_uuid=True), ForeignKey("role.id"), nullable=False)
+
+    joining_date = Column(Date, nullable=False)
+    leaving_date = Column(Date)
+
+    artist = relationship("Artist", back_populates="member_links")
+    member = relationship("Member", back_populates="artist_links")
+    role = relationship("Role", back_populates="artist_links")
+
+
+class MemberRoles(Base):
+    __tablename__ = "member_roles"
+
+    member_id = Column(UUID(as_uuid=True), ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey("role.id"), primary_key=True)
+
+    member = relationship("Member", back_populates="roles")
+    role = relationship("Role", back_populates="member_links")
+
+
+class AdminPrivileges(Base):
+    __tablename__ = "admin_privileges"
+
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("admin.id", ondelete="CASCADE"), primary_key=True)
+    privilege_id = Column(UUID(as_uuid=True), ForeignKey("privilege.id", ondelete="CASCADE"), primary_key=True)
+
+    grant_time = Column(DateTime, nullable=False)
+    revoke_time = Column(DateTime)
+
+    admin = relationship("Admin", back_populates="privileges")
+    privilege = relationship("Privilege", back_populates="admin_links")
