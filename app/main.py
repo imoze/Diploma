@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.tracks import router as tracks_router
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
+from app.api.playlists import router as playlists_router
 
 app = FastAPI(title="U:V API")
 
@@ -22,3 +23,4 @@ def root():
 app.include_router(tracks_router)
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(playlists_router)
