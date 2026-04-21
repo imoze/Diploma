@@ -26,7 +26,7 @@ source_enum = Enum(
 class Track(Base):
     __tablename__ = "track"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     name = Column(Text, nullable=False)
     release_date = Column(Date, nullable=False)
 
@@ -112,7 +112,7 @@ class Users(Base):
 class Playlist(Base):
     __tablename__ = "playlist"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     name = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False)
 
@@ -145,7 +145,7 @@ class AlbumTypes(Base):
 class Album(Base):
     __tablename__ = "album"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     name = Column(Text, nullable=False)
     release_date = Column(Date, nullable=False)
 
@@ -175,7 +175,7 @@ class Album(Base):
 class Artist(Base):
     __tablename__ = "artist"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     name = Column(Text, nullable=False)
     description = Column(Text)
 
@@ -227,7 +227,7 @@ class History(Base):
 class Role(Base):
     __tablename__ = "role"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     name = Column(Text, nullable=False)
 
     member_links = relationship("MemberRoles", back_populates="role")
@@ -237,7 +237,7 @@ class Role(Base):
 class Privilege(Base):
     __tablename__ = "privilege"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     function_procedure = Column(Text, nullable=False)
 
     admin_links = relationship("AdminPrivileges", back_populates="privilege")
@@ -246,7 +246,7 @@ class Privilege(Base):
 class Log(Base):
     __tablename__ = "log"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     admin_id = Column(UUID(as_uuid=True), ForeignKey("admin.id"))
 
     action = Column(Text, nullable=False)
@@ -263,7 +263,7 @@ class Log(Base):
 class Member(Base):
     __tablename__ = "member"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
 
     pseudonim = Column(Text)
@@ -279,7 +279,7 @@ class Member(Base):
 class Admin(Base):
     __tablename__ = "admin"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
 
     role = Column(Text, nullable=False)
