@@ -1,7 +1,8 @@
+from uuid6 import uuid7
 from sqlalchemy import (
     Column, Text, Integer, BigInteger, Date, Boolean,
     ForeignKey, DateTime, Float, Enum,
-    CheckConstraint, UniqueConstraint
+    CheckConstraint, text
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -61,7 +62,7 @@ class Track(Base):
 class Users(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
 
     username = Column(Text, unique=True, nullable=False)
     password_hash = Column(Text, nullable=False)
