@@ -1,19 +1,28 @@
+// frontend/js/auth.js
 import { api } from './api.js';
 
 export async function login(email, password) {
-    const data = await api.post('/auth/login', { email, password });
-    localStorage.setItem('access_token', data.access_token);
-    return data;
+    try {
+        const data = await api.post('/auth/login', { email, password });
+        localStorage.setItem('access_token', data.access_token);
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 export async function register(email, username, password) {
-    await api.post('/auth/register', { email, username, password });
-    // После регистрации нужно подтверждение email, но для простоты пока так
+    try {
+        await api.post('/auth/register', { email, username, password });
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 }
 
 export function logout() {
     localStorage.removeItem('access_token');
-    window.location.href = '/login.html';
+    window.location.href = '/frontend/login.html';
 }
 
 export async function getCurrentUser() {
@@ -26,4 +35,18 @@ export async function getCurrentUser() {
 
 export function isAuthenticated() {
     return !!localStorage.getItem('access_token');
+}
+
+// Редирект, если уже авторизован (для страниц логина/регистрации)
+export function redirectIfAuthenticated() {
+    if (isAuthenticated()) {
+        window.location.href = '/frontend/index.html';
+    }
+}
+
+// Редирект, если НЕ авторизован (для защищённых страниц)
+export function requireAuth() {
+    if (!isAuthenticated()) {
+        window.location.href = '/frontend/login.html';
+    }
 }

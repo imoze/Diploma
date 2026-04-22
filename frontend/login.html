@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Вход</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 440px;
+            padding: 40px 32px;
+            background: var(--bg-card);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .auth-logo a {
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+        .logo-accent {
+            color: var(--accent);
+        }
+        .auth-title {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .auth-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+        .auth-form .form-group {
+            margin-bottom: 24px;
+        }
+        .auth-form label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .auth-form .input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-deep);
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+        .auth-form .input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+        .auth-form .btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+        .auth-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+        }
+        .auth-footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .error-message {
+            color: #ff5c5c;
+            font-size: 14px;
+            margin-top: 8px;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-logo">
+            <a href="index.html">U<span class="logo-accent">:</span>V</a>
+        </div>
+        <h1 class="auth-title">С возвращением</h1>
+        <p class="auth-subtitle">Войдите, чтобы продолжить</p>
+
+        <form id="login-form" class="auth-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" class="input" placeholder="mood@example.com" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" class="input" placeholder="••••••••" required>
+            </div>
+            <div class="error-message" id="error-message"></div>
+            <button type="submit" class="btn btn-primary">Войти</button>
+        </form>
+
+        <div class="auth-footer">
+            Нет аккаунта? <a href="register.html">Зарегистрироваться</a>
+        </div>
+    </div>
+
+    <script type="module">
+        import { login, redirectIfAuthenticated } from './js/auth.js';
+
+        redirectIfAuthenticated();
+
+        const form = document.getElementById('login-form');
+        const errorEl = document.getElementById('error-message');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                errorEl.textContent = 'Заполните все поля';
+                return;
+            }
+
+            const result = await login(email, password);
+            if (result.success) {
+                window.location.href = '/frontend/index.html';
+            } else {
+                errorEl.textContent = result.error || 'Ошибка входа';
+            }
+        });
+    </script>
+</body>
+</html>
