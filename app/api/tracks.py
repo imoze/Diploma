@@ -299,11 +299,10 @@ def stream_track(track_id: UUID, request: Request, db: Session = Depends(get_db)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File does not exist")
 
-    if "range" not in request.headers:
-        track.plays += 1
-        for artist in track.artists:
-            artist.plays += 1
-        db.commit()
+    track.plays += 1
+    for artist in track.artists:
+        artist.plays += 1
+    db.commit()
 
     def iterfile():
         with open(file_path, mode="rb") as file_like:

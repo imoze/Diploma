@@ -1,0 +1,113 @@
+/* Карточки */
+.card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    transition: var(--transition);
+    width: 250px;
+    flex-shrink: 0;
+}
+
+.card:hover {
+    background: var(--bg-card-hover);
+    transform: scale(1.02);
+}
+
+.card-img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-deep));
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Кнопки */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: var(--transition);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+}
+
+.btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--accent);
+    box-shadow: 0 0 8px rgba(138, 92, 255, 0.2);
+}
+
+.btn-accent {
+    background: var(--accent);
+    color: white;
+}
+.btn-accent:hover {
+    background: #7a4ce0;
+    color: white;
+}
+
+/* Поля ввода */
+.input {
+    background: var(--bg-card);
+    border: 1px solid transparent;
+    border-radius: var(--radius-xl);
+    padding: 14px 20px;
+    font-size: 16px;
+    color: var(--text-primary);
+    outline: none;
+    transition: var(--transition);
+    width: 100%;
+}
+
+.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(138, 92, 255, 0.2);
+}
+
+.input::placeholder {
+    color: var(--text-secondary);
+}
+
+/* Поисковая строка (большая) */
+.search-bar-large {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    background: var(--bg-card);
+    border-radius: 30px;
+    padding: 0 20px;
+}
+
+.search-bar-large .input {
+    background: transparent;
+    padding-left: 12px;
+}
+
+.search-bar-large .search-icon {
+    color: var(--text-secondary);
+    font-size: 20px;
+}
+
+.player-btn.liked {
+    color: var(--accent);
+}
