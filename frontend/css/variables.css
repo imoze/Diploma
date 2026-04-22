@@ -1,0 +1,22 @@
+:root {
+    /* Цвета */
+    --bg-deep: #0E0B1F;
+    --bg-card: #16112A;
+    --bg-card-hover: #1E163A;
+    --accent: #8A5CFF;
+    --text-primary: #FFFFFF;
+    --text-secondary: #A8A0C0;
+
+    /* Скругления */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+
+    /* Шрифты */
+    --font-main: 'Inter', sans-serif;
+    --font-mono: 'SF Mono', 'Courier New', monospace;
+
+    /* Переходы */
+    --transition: all 0.2s ease-out;
+}

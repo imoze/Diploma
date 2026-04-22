@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V — музыка по волне</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        /* Дополнительные стили для главной */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 32px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        .logo-accent {
+            color: var(--accent);
+        }
+        .header-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+        }
+        .main-content {
+            padding: 40px 32px;
+        }
+        .search-section {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .trigger-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 24px;
+        }
+        .section-title {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .playlists-row, .albums-row {
+            margin-bottom: 48px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">U<span class="logo-accent">:</span>V</div>
+        <div class="header-actions">
+            <a href="/login.html" class="btn" id="login-btn">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none;"></div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <section class="search-section">
+            <div class="search-bar-large">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="input" placeholder="Найти трек, альбом или артиста..." id="search-input">
+            </div>
+            <div class="trigger-buttons">
+                <button class="btn" id="random-track-btn">🎲 Случайный трек</button>
+                <button class="btn" id="my-wave-btn">🌊 Моя волна</button>
+            </div>
+        </section>
+
+        <section class="playlists-row">
+            <h2 class="section-title">Популярные плейлисты</h2>
+            <div class="horizontal-scroll" id="popular-playlists"></div>
+        </section>
+
+        <section class="albums-row">
+            <h2 class="section-title">Популярные альбомы</h2>
+            <div class="horizontal-scroll" id="new-albums"></div>
+        </section>
+    </main>
+
+    <!-- Глобальный плеер (будет вставлен через JS) -->
+    <div id="player-bar" class="player-bar" style="display: none;">
+        <!-- стили для плеера определим отдельно -->
+    </div>
+
+    <script type="module">
+        import { isAuthenticated, getCurrentUser, logout } from './js/auth.js';
+        import { player } from './js/player.js';
+        import { api } from './js/api.js';
+        import { formatTime, generateCoverPlaceholder } from './js/utils.js';
+
+        // Проверка авторизации и обновление хедера
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (isAuthenticated()) {
+                const user = await getCurrentUser();
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'block';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    // Добавим выпадающее меню позже
+                } else {
+                    // Токен невалиден
+                    localStorage.removeItem('access_token');
+                    loginBtn.style.display = 'block';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'block';
+                avatar.style.display = 'none';
+            }
+        }
+
+        // Загрузка популярных плейлистов
+        async function loadPopularPlaylists() {
+            try {
+                const playlists = await api.get('/playlists?my=false');
+                const container = document.getElementById('popular-playlists');
+                container.innerHTML = playlists.map(p => `
+                    <div class="card" data-id="${p.id}">
+                        <img class="card-img" src="${generateCoverPlaceholder(p.name + p.id, 250)}" alt="${p.name}">
+                        <div class="card-title">${p.name}</div>
+                        <div class="card-subtitle">${p.owner?.username || 'Unknown'}</div>
+                    </div>
+                `).join('');
+                // Добавляем обработчики клика
+                container.querySelectorAll('.card').forEach(card => {
+                    card.addEventListener('click', () => {
+                        window.location.href = `/playlist.html?id=${card.dataset.id}`;
+                    });
+                });
+            } catch (e) {
+                console.error('Failed to load playlists', e);
+            }
+        }
+
+        // Загрузка новых альбомов
+        async function loadNewAlbums() {
+            try {
+                const albums = await api.get('/albums'); // Пока без сортировки
+                const container = document.getElementById('new-albums');
+                container.innerHTML = albums.map(p => `
+                    <div class="card" data-id="${p.id}">
+                        <img class="card-img" src="${generateCoverPlaceholder(p.name + p.id, 250)}" alt="${p.name}">
+                        <div class="card-title">${p.name}</div>
+                        <div class="card-subtitle">${p.owner?.username || 'Unknown'}</div>
+                    </div>
+                `).join('');
+                container.querySelectorAll('.card').forEach(card => {
+                    card.addEventListener('click', () => {
+                        window.location.href = `/album.html?id=${card.dataset.id}`;
+                    });
+                });
+            } catch (e) {
+                console.error('Failed to load albums', e);
+            }
+        }
+
+        // Обработчики кнопок
+        document.getElementById('random-track-btn').addEventListener('click', async () => {
+            try {
+                const tracks = await api.get('/tracks');
+                if (tracks.length > 0) {
+                    const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+                    player.loadTrack(randomTrack.id);
+                }
+            } catch (e) {
+                alert('Не удалось загрузить случайный трек');
+            }
+        });
+
+        document.getElementById('my-wave-btn').addEventListener('click', () => {
+            if (!isAuthenticated()) {
+                alert('Войдите, чтобы использовать «Мою волну»');
+                window.location.href = '/login.html';
+                return;
+            }
+            window.location.href = '/pages/my-wave.html';
+        });
+
+        // Поиск (по Enter)
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const query = e.target.value.trim();
+                if (query) {
+                    window.location.href = `/search.html?q=${encodeURIComponent(query)}`;
+                }
+            }
+        });
+
+        // Инициализация
+        updateHeader();
+        loadPopularPlaylists();
+        loadNewAlbums();
+
+        // Показываем плеер, если есть трек (для теста можно загрузить что-то)
+        window.player = player; // для отладки
+        // Пример: player.loadTrack('какой-то UUID');
+    </script>
+
+    <!-- Подключаем стили плеера -->
+    <style>
+        .player-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            z-index: 1000;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+        .player-cover {
+            width: 64px;
+            height: 64px;
+            border-radius: var(--radius-md);
+            object-fit: cover;
+        }
+        .player-info {
+            flex: 1;
+            min-width: 200px;
+        }
+        .player-track-name {
+            font-size: 18px;
+            font-weight: 500;
+        }
+        .player-artist-name {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .player-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .player-progress-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 400px;
+        }
+        .player-progress {
+            flex: 1;
+            height: 4px;
+            background: rgba(168, 160, 192, 0.3);
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .player-progress::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+        .player-time {
+            font-size: 14px;
+            color: var(--text-secondary);
+            min-width: 40px;
+        }
+        .player-actions {
+            display: flex;
+            gap: 16px;
+            margin-left: auto;
+        }
+        .player-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+            transition: var(--transition);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        .player-btn:hover {
+            color: var(--accent);
+            background: rgba(138, 92, 255, 0.1);
+        }
+        .player-btn.liked {
+            color: var(--accent);
+        }
+    </style>
+
+    <!-- Рендеринг структуры плеера через JS -->
+    <script>
+        (function createPlayerDOM() {
+            const bar = document.getElementById('player-bar');
+            bar.innerHTML = `
+                <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
+                <div class="player-info">
+                    <div id="player-track-name" class="player-track-name">Не выбран трек</div>
+                    <div id="player-artist-name" class="player-artist-name"></div>
+                </div>
+                <div class="player-controls">
+                    <button id="player-play" class="player-btn">▶</button>
+                    <button id="player-next" class="player-btn">⏭</button>
+                </div>
+                <div class="player-progress-container">
+                    <span id="player-current-time" class="player-time">0:00</span>
+                    <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
+                    <span id="player-duration" class="player-time">0:00</span>
+                </div>
+                <div class="player-actions">
+                    <button id="player-like" class="player-btn">❤️</button>
+                    <button id="player-wave" class="player-btn">🌊</button>
+                    <button id="player-expand" class="player-btn">⤢</button>
+                </div>
+            `;
+            // По умолчанию плеер скрыт, пока не загружен трек
+            bar.style.display = 'none';
+            // После создания структуры инициализируем класс Player
+            import('./js/player.js').then(module => {
+                window.player = module.player;
+                // Показываем плеер, если есть трек
+                if (module.player.currentTrack) {
+                    bar.style.display = 'flex';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
