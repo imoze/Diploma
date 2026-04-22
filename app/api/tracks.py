@@ -13,9 +13,10 @@ import librosa
 from uuid6 import uuid7
 
 from app.db.session import get_db
-from app.db.models import PlaylistTracks, Track, Artist, Album, ArtistTracks, AlbumTracks, Member, ArtistMembers
+from app.db.models import Users, PlaylistTracks, Track, Artist, Album, ArtistTracks, AlbumTracks, Member, ArtistMembers, FavTracks
+from app.schemas.common import MessageResponse
 from app.schemas.track import TrackCreate, TrackResponse, TrackUpdate
-from app.core.deps import get_current_member, require_track_membership
+from app.core.deps import get_current_member, require_track_membership, get_current_user
 from AudioAnalysis.NewTrackAnalysis import AnalyseTrack
 
 UPLOAD_DIR = Path("Tracks/NewUploads")
@@ -75,7 +76,7 @@ def build_track_response(track: Track, db: Session) -> TrackResponse:
 
 router = APIRouter(prefix="/api/tracks", tags=["tracks"])
 
-router.get("/", response_model=list[TrackResponse])
+@router.get("/", response_model=list[TrackResponse])
 def get_tracks(q: str | None = None, db: Session = Depends(get_db)):
     query = db.query(Track)
     if q:
@@ -309,3 +310,69 @@ def stream_track(track_id: UUID, request: Request, db: Session = Depends(get_db)
             yield from file_like
 
     return StreamingResponse(iterfile(), media_type="audio/mpeg", headers={"Content-Disposition": f'inline; filename="{track.name}.mp3"'})
+
+
+@router.post("/{track_id}/like", response_model=MessageResponse)
+def like_track(
+    track_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Добавить трек в избранное."""
+    track = db.query(Track).filter(Track.id == track_id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    existing = db.query(FavTracks).filter(
+        FavTracks.user_id == current_user.id,
+        FavTracks.track_id == track_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Track already in favorites")
+
+    # Определяем следующий idx
+    max_idx = db.query(func.max(FavTracks.idx)).filter(
+        FavTracks.user_id == current_user.id
+    ).scalar() or -1
+
+    fav = FavTracks(
+        user_id=current_user.id,
+        track_id=track_id,
+        idx=max_idx + 1
+    )
+    db.add(fav)
+    track.likes += 1
+    db.commit()
+    return {"message": "Track added to favorites"}
+
+@router.delete("/{track_id}/like", response_model=MessageResponse)
+def unlike_track(
+    track_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить трек из избранного."""
+    track = db.query(Track).filter(Track.id == track_id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    fav = db.query(FavTracks).filter(
+        FavTracks.user_id == current_user.id,
+        FavTracks.track_id == track_id
+    ).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Track not in favorites")
+
+    db.delete(fav)
+    track.likes -= 1
+    db.commit()
+
+    # Переиндексация оставшихся избранных треков пользователя
+    remaining = db.query(FavTracks).filter(
+        FavTracks.user_id == current_user.id
+    ).order_by(FavTracks.idx).all()
+    for i, f in enumerate(remaining):
+        f.idx = i
+    db.commit()
+
+    return {"message": "Track removed from favorites"}

@@ -6,9 +6,10 @@ from datetime import date
 from typing import Optional, List
 
 from app.db.session import get_db
-from app.db.models import Album, AlbumTypes, FavAlbums, Artist, Track, ArtistAlbums, AlbumTracks, ArtistTracks, Member, ArtistMembers
+from app.db.models import Users, Album, AlbumTypes, FavAlbums, Artist, Track, ArtistAlbums, AlbumTracks, ArtistTracks, Member, ArtistMembers
+from app.schemas.common import MessageResponse
 from app.schemas.album import AlbumCreate, AlbumUpdate, AlbumResponse
-from app.core.deps import get_current_member, require_artist_membership_for_album
+from app.core.deps import get_current_member, require_artist_membership_for_album, get_current_user
 
 
 # ---------- Вспомогательная функция для формирования ответа ----------
@@ -285,3 +286,64 @@ def reorder_album_tracks(
 
     db.commit()
     return {"message": "Order updated"}
+
+@router.post("/{album_id}/like", response_model=MessageResponse)
+def like_album(
+    album_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    album = db.query(Album).filter(Album.id == album_id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    existing = db.query(FavAlbums).filter(
+        FavAlbums.user_id == current_user.id,
+        FavAlbums.album_id == album_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Album already in favorites")
+
+    max_idx = db.query(func.max(FavAlbums.idx)).filter(
+        FavAlbums.user_id == current_user.id
+    ).scalar() or -1
+
+    fav = FavAlbums(
+        user_id=current_user.id,
+        album_id=album_id,
+        idx=max_idx + 1
+    )
+    db.add(fav)
+    album.likes += 1
+    db.commit()
+    return {"message": "Album added to favorites"}
+
+@router.delete("/{album_id}/like", response_model=MessageResponse)
+def unlike_album(
+    album_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    album = db.query(Album).filter(Album.id == album_id).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    fav = db.query(FavAlbums).filter(
+        FavAlbums.user_id == current_user.id,
+        FavAlbums.album_id == album_id
+    ).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Album not in favorites")
+
+    db.delete(fav)
+    album.likes -= 1
+    db.commit()
+
+    remaining = db.query(FavAlbums).filter(
+        FavAlbums.user_id == current_user.id
+    ).order_by(FavAlbums.idx).all()
+    for i, f in enumerate(remaining):
+        f.idx = i
+    db.commit()
+
+    return {"message": "Album removed from favorites"}

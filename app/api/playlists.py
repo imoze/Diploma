@@ -1,16 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func, text
 from uuid import UUID
 from datetime import datetime
 
 from app.db.session import get_db
-from app.db.models import Playlist, UserPlaylists, PlaylistTracks, Track, Users
+from app.db.models import Playlist, UserPlaylists, PlaylistTracks, Track, Users, FavPlaylists, Artist, ArtistTracks
+from app.schemas.common import MessageResponse
 from app.schemas.playlist import (
     PlaylistCreate, PlaylistUpdate, PlaylistResponse,
     PlaylistAddTrack, PlaylistTrackResponse, CollaboratorAdd,
     UserBrief
 )
+from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
 from app.core.deps import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/playlists", tags=["playlists"])
@@ -378,3 +380,121 @@ def remove_collaborator(
     db.delete(collab_link)
     db.commit()
     return
+
+@router.post("/{playlist_id}/like", response_model=MessageResponse)
+def like_playlist(
+    playlist_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    playlist = db.query(Playlist).filter(Playlist.id == playlist_id).first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    existing = db.query(FavPlaylists).filter(
+        FavPlaylists.user_id == current_user.id,
+        FavPlaylists.playlist_id == playlist_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Playlist already in favorites")
+
+    max_idx = db.query(func.max(FavPlaylists.idx)).filter(
+        FavPlaylists.user_id == current_user.id
+    ).scalar() or -1
+
+    fav = FavPlaylists(
+        user_id=current_user.id,
+        playlist_id=playlist_id,
+        idx=max_idx + 1
+    )
+    db.add(fav)
+    playlist.likes += 1
+    db.commit()
+    return {"message": "Playlist added to favorites"}
+
+@router.delete("/{playlist_id}/like", response_model=MessageResponse)
+def unlike_playlist(
+    playlist_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    playlist = db.query(Playlist).filter(Playlist.id == playlist_id).first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    fav = db.query(FavPlaylists).filter(
+        FavPlaylists.user_id == current_user.id,
+        FavPlaylists.playlist_id == playlist_id
+    ).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Playlist not in favorites")
+
+    db.delete(fav)
+    playlist.likes -= 1
+    db.commit()
+
+    remaining = db.query(FavPlaylists).filter(
+        FavPlaylists.user_id == current_user.id
+    ).order_by(FavPlaylists.idx).all()
+    for i, f in enumerate(remaining):
+        f.idx = i
+    db.commit()
+
+    return {"message": "Playlist removed from favorites"}
+
+@router.post("/{playlist_id}/wave", response_model=list[SimilarTrackResponse])
+def get_playlist_wave(
+    playlist_id: UUID,
+    limit: int = 20,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """Бесконечная лента рекомендаций на основе треков плейлиста."""
+    playlist = get_playlist_with_access_check(playlist_id, current_user, db)
+    
+    # Получаем треки плейлиста с векторами
+    tracks = db.query(Track).join(PlaylistTracks).filter(
+        PlaylistTracks.playlist_id == playlist_id,
+        Track.feature_vector.is_not(None)
+    ).all()
+    
+    if not tracks:
+        raise HTTPException(status_code=400, detail="Playlist has no tracks with feature vectors")
+    
+    # Средний вектор
+    import numpy as np
+    vectors = [np.array(t.feature_vector) for t in tracks]
+    mean_vector = np.mean(vectors, axis=0).tolist()
+    vector_str = f"[{','.join(map(str, mean_vector))}]"
+    
+    # ID треков плейлиста для исключения
+    playlist_track_ids = [t.id for t in tracks]
+    
+    sql = text("""
+        SELECT 
+            t.id, t.name, t.duration,
+            1 - (t.feature_vector <=> CAST(:vector AS vector)) AS similarity
+        FROM track t
+        WHERE t.feature_vector IS NOT NULL
+          AND t.id != ALL(:exclude_ids)
+        ORDER BY t.feature_vector <=> CAST(:vector AS vector)
+        LIMIT :limit
+    """)
+    
+    result = db.execute(sql, {
+        "vector": vector_str,
+        "exclude_ids": playlist_track_ids,
+        "limit": limit
+    })
+    
+    rows = result.fetchall()
+    response = []
+    for r in rows:
+        artists = db.query(Artist).join(ArtistTracks).filter(ArtistTracks.track_id == r.id).all()
+        similarity = round(r.similarity * 100, 1)
+        response.append(SimilarTrackResponse(
+            id=r.id, name=r.name, duration=r.duration,
+            artists=[ArtistBriefForTrack.model_validate(a) for a in artists],
+            similarity=similarity
+        ))
+    return response
