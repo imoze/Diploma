@@ -60,7 +60,7 @@
     <header class="header">
         <div class="logo">U<span class="logo-accent">:</span>V</div>
         <div class="header-actions">
-            <a href="/login.html" class="btn" id="login-btn">Войти</a>
+            <a href="/frontend/login.html" class="btn" id="login-btn">Войти</a>
             <div class="avatar" id="user-avatar" style="display: none;"></div>
         </div>
     </header>
@@ -120,6 +120,11 @@
                 loginBtn.style.display = 'block';
                 avatar.style.display = 'none';
             }
+            avatar.addEventListener('click', () => {
+                if (isAuthenticated()) {
+                    logout();
+                }
+            });
         }
 
         // Загрузка популярных плейлистов

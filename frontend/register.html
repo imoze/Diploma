@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Регистрация</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        /* Используем те же стили, что и на login */
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 440px;
+            padding: 40px 32px;
+            background: var(--bg-card);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .auth-logo a {
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+        .logo-accent {
+            color: var(--accent);
+        }
+        .auth-title {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .auth-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+        .auth-form .form-group {
+            margin-bottom: 24px;
+        }
+        .auth-form label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .auth-form .input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-deep);
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+        .auth-form .input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+        .auth-form .btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+        .auth-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+        }
+        .auth-footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .error-message {
+            color: #ff5c5c;
+            font-size: 14px;
+            margin-top: 8px;
+            min-height: 20px;
+        }
+        .success-message {
+            color: #5cff8a;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-logo">
+            <a href="index.html">U<span class="logo-accent">:</span>V</a>
+        </div>
+        <h1 class="auth-title">Присоединиться</h1>
+        <p class="auth-subtitle">Создайте аккаунт для персональных волн</p>
+
+        <form id="register-form" class="auth-form">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" class="input" placeholder="mood@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="username">Имя пользователя</label>
+                <input type="text" id="username" class="input" placeholder="moodlistener" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" class="input" placeholder="Минимум 6 символов" required minlength="6">
+            </div>
+            <div class="error-message" id="error-message"></div>
+            <div class="success-message" id="success-message"></div>
+            <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+        </form>
+
+        <div class="auth-footer">
+            Уже есть аккаунт? <a href="/frontend/login.html">Войти</a>
+        </div>
+    </div>
+
+    <script type="module">
+        import { register, redirectIfAuthenticated } from './js/auth.js';
+
+        redirectIfAuthenticated();
+
+        const form = document.getElementById('register-form');
+        const errorEl = document.getElementById('error-message');
+        const successEl = document.getElementById('success-message');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            errorEl.textContent = '';
+            successEl.textContent = '';
+
+            if (password.length < 6) {
+                errorEl.textContent = 'Пароль должен быть не менее 6 символов';
+                return;
+            }
+
+            const result = await register(email, username, password);
+            if (result.success) {
+                successEl.textContent = 'Регистрация прошла успешно! Перенаправляем...';
+                setTimeout(() => {
+                    window.location.href = '/frontend/login.html';
+                }, 1500);
+            } else {
+                errorEl.textContent = result.error || 'Ошибка регистрации';
+            }
+        });
+    </script>
+</body>
+</html>
