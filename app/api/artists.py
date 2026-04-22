@@ -5,9 +5,10 @@ from uuid import UUID
 from datetime import date
 
 from app.db.session import get_db
-from app.db.models import Artist, Album, Track, FavArtists, ArtistTracks, ArtistAlbums, ArtistMembers, Member, Role
+from app.db.models import Users, Artist, Album, Track, FavArtists, ArtistTracks, ArtistAlbums, ArtistMembers, Member, Role
+from app.schemas.common import MessageResponse
 from app.schemas.artist import ArtistCreate, ArtistUpdate, ArtistResponse, ArtistBrief
-from app.core.deps import get_current_user_optional, get_current_member, require_artist_membership
+from app.core.deps import get_current_user, get_current_member, require_artist_membership
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
 
@@ -193,3 +194,64 @@ def delete_artist(
     db.delete(artist)
     db.commit()
     return
+
+@router.post("/{artist_id}/like", response_model=MessageResponse)
+def like_artist(
+    artist_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    existing = db.query(FavArtists).filter(
+        FavArtists.user_id == current_user.id,
+        FavArtists.artist_id == artist_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Artist already in favorites")
+
+    max_idx = db.query(func.max(FavArtists.idx)).filter(
+        FavArtists.user_id == current_user.id
+    ).scalar() or -1
+
+    fav = FavArtists(
+        user_id=current_user.id,
+        artist_id=artist_id,
+        idx=max_idx + 1
+    )
+    db.add(fav)
+    artist.likes += 1
+    db.commit()
+    return {"message": "Artist added to favorites"}
+
+@router.delete("/{artist_id}/like", response_model=MessageResponse)
+def unlike_artist(
+    artist_id: UUID,
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    fav = db.query(FavArtists).filter(
+        FavArtists.user_id == current_user.id,
+        FavArtists.artist_id == artist_id
+    ).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Artist not in favorites")
+
+    db.delete(fav)
+    artist.likes -= 1
+    db.commit()
+
+    remaining = db.query(FavArtists).filter(
+        FavArtists.user_id == current_user.id
+    ).order_by(FavArtists.idx).all()
+    for i, f in enumerate(remaining):
+        f.idx = i
+    db.commit()
+
+    return {"message": "Artist removed from favorites"}

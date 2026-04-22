@@ -43,3 +43,12 @@ class TrackCreate(BaseModel):
 class TrackUpdate(BaseModel):
     name: Optional[str] = None
     release_date: Optional[date] = None
+
+class SimilarTrackResponse(BaseModel):
+    id: UUID
+    name: str
+    duration: int
+    artists: List[ArtistBriefForTrack] = []
+    similarity: float  # процент совпадения (0-100)
+    class Config:
+        from_attributes = True
