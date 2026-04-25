@@ -130,6 +130,7 @@ def create_playlist(
 @router.get("/", response_model=list[PlaylistResponse])
 def get_playlists(
     my: bool = False,
+    limit: int = 50,
     current_user: Users | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
@@ -152,7 +153,7 @@ def get_playlists(
             conditions.append(Playlist.id.in_(user_playlists_subquery))
         query = query.filter(or_(*conditions))
 
-    playlists = query.order_by(Playlist.created_at.desc()).limit(50).all()
+    playlists = query.order_by(Playlist.likes.desc()).limit(limit).all()
     return [build_playlist_response(p, db) for p in playlists]
 
 @router.get("/{playlist_id}", response_model=PlaylistResponse)

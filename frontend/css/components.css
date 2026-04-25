@@ -111,3 +111,194 @@
 .player-btn.liked {
     color: var(--accent);
 }
+
+.search-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 600px;
+    max-width: 100%;
+}
+.search-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 8px 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 1001;
+    max-height: 400px;
+    overflow-y: auto;
+    text-align: left;
+}
+.dropdown-section {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.dropdown-item {
+    padding: 10px 16px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.dropdown-item:hover {
+    background: rgba(138, 92, 255, 0.1);
+}
+
+/* Полноэкранный плеер */
+.fullscreen-player {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-deep);
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.fullscreen-player-content {
+    width: 90%;
+    max-width: 1200px;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+.fullscreen-header {
+    display: flex;
+    align-items: center;
+    padding: 20px 0;
+    gap: 20px;
+}
+.fullscreen-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 28px;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition);
+}
+.fullscreen-close:hover {
+    color: var(--accent);
+    background: rgba(138,92,255,0.1);
+}
+.fullscreen-track-info {
+    display: flex;
+    flex-direction: column;
+}
+#fullscreen-track-name {
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+#fullscreen-artist-name {
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+.wave-canvas {
+    flex: 1;
+    width: 100%;
+    background: transparent;
+    margin: 20px 0;
+    min-height: 200px;
+}
+.uv-index {
+    font-family: 'SF Mono', monospace;
+    font-size: 48px;
+    text-align: center;
+    color: var(--accent);
+    min-height: 70px;
+    transition: opacity 0.3s;
+}
+.fullscreen-controls {
+    padding: 20px 0;
+}
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.progress-container input {
+    flex: 1;
+}
+.control-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+}
+.control-buttons button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 10px 20px;
+    border-radius: 30px;
+    transition: var(--transition);
+}
+.control-buttons button:hover {
+    color: var(--accent);
+    background: rgba(138,92,255,0.1);
+}
+.similar-tracks-list {
+    margin-top: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+}
+.similar-track-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.similar-track-item:hover {
+    background: rgba(138,92,255,0.1);
+}
+.similar-track-info {
+    flex: 1;
+}
+.similar-track-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.similar-track-artists {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-left: 8px;
+}
+.similar-track-uv {
+    font-family: monospace;
+    font-size: 20px;
+    color: var(--accent);
+    margin-right: 15px;
+}
+.play-similar-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+}
+.loading-dots {
+    text-align: center;
+    color: var(--text-secondary);
+}

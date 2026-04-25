@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from datetime import date
@@ -15,7 +15,7 @@ from uuid6 import uuid7
 from app.db.session import get_db
 from app.db.models import Users, PlaylistTracks, Track, Artist, Album, ArtistTracks, AlbumTracks, Member, ArtistMembers, FavTracks
 from app.schemas.common import MessageResponse
-from app.schemas.track import TrackCreate, TrackResponse, TrackUpdate
+from app.schemas.track import TrackCreate, TrackResponse, TrackUpdate,  ArtistBriefForTrack, SimilarTrackResponse
 from app.core.deps import get_current_member, require_track_membership, get_current_user
 from AudioAnalysis.NewTrackAnalysis import AnalyseTrack
 
@@ -77,11 +77,11 @@ def build_track_response(track: Track, db: Session) -> TrackResponse:
 router = APIRouter(prefix="/api/tracks", tags=["tracks"])
 
 @router.get("/", response_model=list[TrackResponse])
-def get_tracks(q: str | None = None, db: Session = Depends(get_db)):
+def get_tracks(q: str | None = None, limit: int = 50, db: Session = Depends(get_db)):
     query = db.query(Track)
     if q:
         query = query.filter(Track.name.ilike(f"%{q}%"))
-    tracks = query.limit(50).all()
+    tracks = query.limit(limit).all()
     return [build_track_response(t, db) for t in tracks]
 
 
@@ -253,15 +253,20 @@ def get_similar_tracks(
     if track.feature_vector is None:
         raise HTTPException(status_code=400, detail="No feature vector")
 
+    vector_str = f"[{','.join(map(str, track.feature_vector))}]"
+
     sql = text("""
-        SELECT id, name, release_date, duration, likes, plays
-        FROM track
-        WHERE id != :track_id
-        ORDER BY feature_vector <=> CAST(:vector AS vector)
+        SELECT 
+            t.id, 
+            t.name, 
+            t.duration,
+            1 - (t.feature_vector <=> CAST(:vector AS vector)) AS similarity
+        FROM track t
+        WHERE t.id != :track_id
+          AND t.feature_vector IS NOT NULL
+        ORDER BY t.feature_vector <=> CAST(:vector AS vector)
         LIMIT :limit
     """)
-
-    vector_str = f"[{','.join(map(str, track.feature_vector.tolist()))}]"
 
     result = db.execute(sql, {
         "track_id": str(track_id),
@@ -270,45 +275,42 @@ def get_similar_tracks(
     })
 
     rows = result.fetchall()
-
-    return [
-        {
-            "id": r.id,
-            "name": r.name,
-            "release_date": r.release_date,
-            "duration": r.duration,
-            "likes": r.likes,
-            "plays": r.plays,
-        }
-        for r in rows
-    ]
+    response = []
+    for r in rows:
+        # Получаем артистов трека
+        artists = db.query(Artist).join(ArtistTracks).filter(ArtistTracks.track_id == r.id).all()
+        similarity = round(r.similarity * 100, 1)  # переводим в проценты с одним знаком
+        response.append(SimilarTrackResponse(
+            id=r.id,
+            name=r.name,
+            duration=r.duration,
+            artists=[ArtistBriefForTrack.model_validate(a) for a in artists],
+            similarity=similarity
+        ))
+    return response
 
 
 @router.get("/{track_id}/stream")
 def stream_track(track_id: UUID, request: Request, db: Session = Depends(get_db)):
     track = db.query(Track).filter(Track.id == track_id).first()
-
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
-
-    if not track.track_path:
+    if not track.track_path or not os.path.exists(track.track_path):
         raise HTTPException(status_code=404, detail="Track file not found")
 
-    file_path = track.track_path
-
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File does not exist")
-
+    # Увеличиваем счётчики прослушиваний
     track.plays += 1
     for artist in track.artists:
         artist.plays += 1
     db.commit()
 
-    def iterfile():
-        with open(file_path, mode="rb") as file_like:
-            yield from file_like
-
-    return StreamingResponse(iterfile(), media_type="audio/mpeg", headers={"Content-Disposition": f'inline; filename="{track.name}.mp3"'})
+    # FileResponse сам обрабатывает Range-запросы и выставляет Accept-Ranges: bytes
+    return FileResponse(
+        path=track.track_path,
+        media_type="audio/mpeg",
+        filename=f"{track.name}.mp3",
+        headers={"Content-Disposition": "inline"}
+    )
 
 
 @router.post("/{track_id}/like", response_model=MessageResponse)
