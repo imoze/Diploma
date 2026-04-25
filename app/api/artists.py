@@ -16,13 +16,14 @@ router = APIRouter(prefix="/api/artists", tags=["artists"])
 @router.get("/", response_model=list[ArtistBrief])
 def get_artists(
     q: str | None = None,
+    limit : int = 50,
     db: Session = Depends(get_db)
 ):
     """Получить список артистов (с возможностью поиска по имени)."""
     query = db.query(Artist)
     if q:
         query = query.filter(Artist.name.ilike(f"%{q}%"))
-    artists = query.order_by(Artist.name).limit(50).all()
+    artists = query.order_by(Artist.name).limit(limit).all()
     return artists
 
 @router.get("/{artist_id}", response_model=ArtistResponse)

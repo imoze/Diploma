@@ -75,13 +75,14 @@ router = APIRouter(prefix="/api/albums", tags=["albums"])
 @router.get("/", response_model=list[AlbumResponse])
 def get_albums(
     q: str | None = None,
+    limit: int = 50,
     db: Session = Depends(get_db)
 ):
     """Получить список альбомов (с возможностью поиска по названию)."""
     query = db.query(Album)
     if q:
         query = query.filter(Album.name.ilike(f"%{q}%"))
-    albums = query.order_by(Album.release_date.desc()).limit(50).all()
+    albums = query.order_by(Album.likes.desc()).limit(limit).all()
     return [build_album_response(album, db) for album in albums]
 
 @router.get("/{album_id}", response_model=AlbumResponse)

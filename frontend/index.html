@@ -66,17 +66,20 @@
     </header>
 
     <main class="main-content">
-        <section class="search-section">
-            <div class="search-bar-large">
-                <span class="search-icon">🔍</span>
-                <input type="text" class="input" placeholder="Найти трек, альбом или артиста..." id="search-input">
+       <section class="search-section">
+            <div class="search-wrapper">
+                <div class="search-bar-large">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" class="input" placeholder="Найти трек, альбом или артиста..." id="search-input">
+                </div>
+                <div class="search-dropdown" id="search-dropdown" style="display: none;"></div>
             </div>
             <div class="trigger-buttons">
                 <button class="btn" id="random-track-btn">🎲 Случайный трек</button>
                 <button class="btn" id="my-wave-btn">🌊 Моя волна</button>
             </div>
         </section>
-
+        
         <section class="playlists-row">
             <h2 class="section-title">Популярные плейлисты</h2>
             <div class="horizontal-scroll" id="popular-playlists"></div>
@@ -94,12 +97,12 @@
     </div>
 
     <script type="module">
-        import { isAuthenticated, getCurrentUser, logout } from './js/auth.js';
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';
         import { player } from './js/player.js';
         import { api } from './js/api.js';
-        import { formatTime, generateCoverPlaceholder } from './js/utils.js';
+        import { generateCoverPlaceholder, debounce } from './js/utils.js';
 
-        // Проверка авторизации и обновление хедера
+        // --- Header ---
         async function updateHeader() {
             const loginBtn = document.getElementById('login-btn');
             const avatar = document.getElementById('user-avatar');
@@ -107,11 +110,10 @@
                 const user = await getCurrentUser();
                 if (user) {
                     loginBtn.style.display = 'none';
-                    avatar.style.display = 'block';
+                    avatar.style.display = 'flex';
                     avatar.textContent = user.username.charAt(0).toUpperCase();
-                    // Добавим выпадающее меню позже
+                    avatar.addEventListener('click', () => window.location.href = '/profile.html');
                 } else {
-                    // Токен невалиден
                     localStorage.removeItem('access_token');
                     loginBtn.style.display = 'block';
                     avatar.style.display = 'none';
@@ -120,26 +122,20 @@
                 loginBtn.style.display = 'block';
                 avatar.style.display = 'none';
             }
-            avatar.addEventListener('click', () => {
-                if (isAuthenticated()) {
-                    logout();
-                }
-            });
         }
 
-        // Загрузка популярных плейлистов
+        // --- Загрузка популярных плейлистов ---
         async function loadPopularPlaylists() {
             try {
                 const playlists = await api.get('/playlists?my=false');
                 const container = document.getElementById('popular-playlists');
-                container.innerHTML = playlists.map(p => `
+                container.innerHTML = playlists.slice(0, 10).map(p => `
                     <div class="card" data-id="${p.id}">
                         <img class="card-img" src="${generateCoverPlaceholder(p.name + p.id, 250)}" alt="${p.name}">
                         <div class="card-title">${p.name}</div>
-                        <div class="card-subtitle">${p.owner?.username || 'Unknown'}</div>
+                        <div class="card-subtitle">${p.owner?.username || 'U:V'}</div>
                     </div>
                 `).join('');
-                // Добавляем обработчики клика
                 container.querySelectorAll('.card').forEach(card => {
                     card.addEventListener('click', () => {
                         window.location.href = `/playlist.html?id=${card.dataset.id}`;
@@ -150,18 +146,23 @@
             }
         }
 
-        // Загрузка новых альбомов
+        // --- Загрузка новых альбомов (сортируем по дате релиза) ---
         async function loadNewAlbums() {
             try {
-                const albums = await api.get('/albums'); // Пока без сортировки
+                const albums = await api.get('/albums');
+                // сортируем по дате (новые сверху) и берём первые 10
+                const sorted = albums.sort((a,b) => new Date(b.release_date) - new Date(a.release_date)).slice(0,10);
                 const container = document.getElementById('new-albums');
-                container.innerHTML = albums.map(p => `
-                    <div class="card" data-id="${p.id}">
-                        <img class="card-img" src="${generateCoverPlaceholder(p.name + p.id, 250)}" alt="${p.name}">
-                        <div class="card-title">${p.name}</div>
-                        <div class="card-subtitle">${p.owner?.username || 'Unknown'}</div>
-                    </div>
-                `).join('');
+                container.innerHTML = sorted.map(album => {
+                    const artistNames = album.artists?.map(a => a.name).join(', ') || 'Various Artists';
+                    return `
+                        <div class="card" data-id="${album.id}">
+                            <img class="card-img" src="${generateCoverPlaceholder(album.name + album.id, 250)}" alt="${album.name}">
+                            <div class="card-title">${album.name}</div>
+                            <div class="card-subtitle">${artistNames}</div>
+                        </div>
+                    `;
+                }).join('');
                 container.querySelectorAll('.card').forEach(card => {
                     card.addEventListener('click', () => {
                         window.location.href = `/album.html?id=${card.dataset.id}`;
@@ -172,19 +173,96 @@
             }
         }
 
-        // Обработчики кнопок
+        // --- Поиск с выпадающим списком (debounce) ---
+        const searchInput = document.getElementById('search-input');
+        const dropdown = document.getElementById('search-dropdown');
+
+        async function performSearch(query) {
+            if (!query) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            try {
+                const [tracks, albums, artists] = await Promise.all([
+                    api.get(`/tracks?q=${encodeURIComponent(query)}`),
+                    api.get(`/albums?q=${encodeURIComponent(query)}`),
+                    api.get(`/artists?q=${encodeURIComponent(query)}`)
+                ]);
+                renderDropdown(tracks.slice(0,3), albums.slice(0,3), artists.slice(0,3));
+            } catch (e) {
+                console.error('Search error', e);
+            }
+        }
+
+        function renderDropdown(tracks, albums, artists) {
+            let html = '';
+            if (tracks.length) {
+                html += `<div class="dropdown-section">Треки</div>`;
+                tracks.forEach(t => {
+                    const artistsStr = t.artists?.map(a => a.name).join(', ') || '';
+                    html += `<div class="dropdown-item" data-type="track" data-id="${t.id}">🎵 ${t.name} — ${artistsStr}</div>`;
+                });
+            }
+            if (albums.length) {
+                html += `<div class="dropdown-section">Альбомы</div>`;
+                albums.forEach(a => {
+                    html += `<div class="dropdown-item" data-type="album" data-id="${a.id}">💿 ${a.name}</div>`;
+                });
+            }
+            if (artists.length) {
+                html += `<div class="dropdown-section">Артисты</div>`;
+                artists.forEach(a => {
+                    html += `<div class="dropdown-item" data-type="artist" data-id="${a.id}">🎤 ${a.name}</div>`;
+                });
+            }
+            if (!html) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            dropdown.innerHTML = html;
+            dropdown.style.display = 'block';
+            // обработчики кликов
+            dropdown.querySelectorAll('.dropdown-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const type = item.dataset.type;
+                    const id = item.dataset.id;
+                    if (type === 'track') player.loadTrack(id);
+                    else if (type === 'album') window.location.href = `/album.html?id=${id}`;
+                    else if (type === 'artist') window.location.href = `/artist.html?id=${id}`;
+                    dropdown.style.display = 'none';
+                    searchInput.value = '';
+                });
+            });
+        }
+
+        const debouncedSearch = debounce(performSearch, 300);
+        searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const query = e.target.value.trim();
+                if (query) window.location.href = `/search.html?q=${encodeURIComponent(query)}`;
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // --- Кнопка «Случайный трек» ---
         document.getElementById('random-track-btn').addEventListener('click', async () => {
             try {
                 const tracks = await api.get('/tracks');
                 if (tracks.length > 0) {
-                    const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
-                    player.loadTrack(randomTrack.id);
+                    const random = tracks[Math.floor(Math.random() * tracks.length)];
+                    player.loadTrack(random.id);
                 }
             } catch (e) {
                 alert('Не удалось загрузить случайный трек');
             }
         });
 
+        // --- Кнопка «Моя волна» (требует авторизации) ---
         document.getElementById('my-wave-btn').addEventListener('click', () => {
             if (!isAuthenticated()) {
                 alert('Войдите, чтобы использовать «Мою волну»');
@@ -194,24 +272,12 @@
             window.location.href = '/pages/my-wave.html';
         });
 
-        // Поиск (по Enter)
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const query = e.target.value.trim();
-                if (query) {
-                    window.location.href = `/search.html?q=${encodeURIComponent(query)}`;
-                }
-            }
-        });
-
-        // Инициализация
+        // --- Инициализация ---
         updateHeader();
         loadPopularPlaylists();
         loadNewAlbums();
 
-        // Показываем плеер, если есть трек (для теста можно загрузить что-то)
         window.player = player; // для отладки
-        // Пример: player.loadTrack('какой-то UUID');
     </script>
 
     <!-- Подключаем стили плеера -->
