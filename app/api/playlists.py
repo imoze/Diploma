@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, text
+from sqlalchemy import and_, or_, func, text, select
 from uuid import UUID
 from datetime import datetime
 
@@ -139,17 +139,17 @@ def get_playlists(
 
     if my and current_user:
         # Плейлисты, где пользователь участник (владелец или коллаборатор)
-        subquery = db.query(UserPlaylists.playlist_id).filter(
+        subquery = select(UserPlaylists.playlist_id).where(
             UserPlaylists.user_id == current_user.id
-        ).subquery()
+        ).scalar_subquery()
         query = query.filter(Playlist.id.in_(subquery))
     else:
         # Публичные плейлисты и приватные где пользователь владелец или коллаборатор 
         conditions = [Playlist.is_public == True]
         if current_user:
-            user_playlists_subquery = db.query(UserPlaylists.playlist_id).filter(
+            user_playlists_subquery = select(UserPlaylists.playlist_id).where(
                 UserPlaylists.user_id == current_user.id
-            ).subquery()
+            ).scalar_subquery()
             conditions.append(Playlist.id.in_(user_playlists_subquery))
         query = query.filter(or_(*conditions))
 
