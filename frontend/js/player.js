@@ -91,7 +91,7 @@ class Player {
             this.audio.load();
 
             // Обновляем UI плеера
-            this.trackNameEl.innerHTML = `<a href="/frontend/track.html?id=${trackId}" сlass="player-track-link">${track.name}</a>`;
+            this.trackNameEl.innerHTML = `<a href="/frontend/track.html?id=${trackId}" class="player-track-link">${track.name}</a>`;
             const artists = track.artists?.map(a => a.name).join(', ') || 'Unknown Artist';
             this.artistNameEl.textContent = artists;
             // Для обложки пока ставим плейсхолдер

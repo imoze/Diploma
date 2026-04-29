@@ -55,3 +55,6 @@ class TokenResponse(BaseModel):
 
 class FavoriteTrackIds(BaseModel):
     track_ids: List[UUID]
+
+class FavoriteArtistIds(BaseModel):
+    artist_ids: List[UUID]
