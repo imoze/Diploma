@@ -19,7 +19,7 @@ export async function apiRequest(endpoint, options = {}) {
     if (response.status === 401) {
         // Токен истёк или невалиден
         localStorage.removeItem('access_token');
-        window.location.href = '/login.html';
+        window.location.href = '/frontend/login.html';
         throw new Error('Unauthorized');
     }
 
