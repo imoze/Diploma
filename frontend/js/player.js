@@ -169,8 +169,8 @@ class Player {
 
     openWaveView() {
         if (!this.currentTrack) return;
-        // Откроем страницу или модалку с поиском похожих
-        window.location.href = `/pages/similar.html?track=${this.currentTrack.id}`;
+        this.openFullscreenPlayer();
+        this.findSimilarTracks();
     }
 
     openFullscreenPlayer() {

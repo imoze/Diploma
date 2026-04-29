@@ -112,7 +112,7 @@
                     loginBtn.style.display = 'none';
                     avatar.style.display = 'flex';
                     avatar.textContent = user.username.charAt(0).toUpperCase();
-                    avatar.addEventListener('click', () => window.location.href = '/profile.html');
+                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
                 } else {
                     localStorage.removeItem('access_token');
                     loginBtn.style.display = 'block';
@@ -138,7 +138,7 @@
                 `).join('');
                 container.querySelectorAll('.card').forEach(card => {
                     card.addEventListener('click', () => {
-                        window.location.href = `/playlist.html?id=${card.dataset.id}`;
+                        window.location.href = `/frontend/playlist.html?id=${card.dataset.id}`;
                     });
                 });
             } catch (e) {
@@ -165,7 +165,7 @@
                 }).join('');
                 container.querySelectorAll('.card').forEach(card => {
                     card.addEventListener('click', () => {
-                        window.location.href = `/album.html?id=${card.dataset.id}`;
+                        window.location.href = `/frontend/album.html?id=${card.dataset.id}`;
                     });
                 });
             } catch (e) {
@@ -227,8 +227,8 @@
                     const type = item.dataset.type;
                     const id = item.dataset.id;
                     if (type === 'track') player.loadTrack(id);
-                    else if (type === 'album') window.location.href = `/album.html?id=${id}`;
-                    else if (type === 'artist') window.location.href = `/artist.html?id=${id}`;
+                    else if (type === 'album') window.location.href = `/frontend/album.html?id=${id}`;
+                    else if (type === 'artist') window.location.href = `/frontend/artist.html?id=${id}`;
                     dropdown.style.display = 'none';
                     searchInput.value = '';
                 });
@@ -240,7 +240,7 @@
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const query = e.target.value.trim();
-                if (query) window.location.href = `/search.html?q=${encodeURIComponent(query)}`;
+                if (query) window.location.href = `/frontend/search.html?q=${encodeURIComponent(query)}`;
             }
         });
         document.addEventListener('click', (e) => {
@@ -266,10 +266,10 @@
         document.getElementById('my-wave-btn').addEventListener('click', () => {
             if (!isAuthenticated()) {
                 alert('Войдите, чтобы использовать «Мою волну»');
-                window.location.href = '/login.html';
+                window.location.href = '/frontend/login.html';
                 return;
             }
-            window.location.href = '/pages/my-wave.html';
+            window.location.href = '/frontend/pages/my-wave.html';
         });
 
         // --- Инициализация ---
