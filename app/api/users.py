@@ -2,13 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from uuid import UUID
+from typing import List
 
 from app.db.session import get_db
-from app.db.models import Users, FavPlaylists, FavAlbums, FavTracks, FavArtists, ArtistTracks, Artist, Track
+from app.db.models import Album, Playlist, Users, FavPlaylists, FavAlbums, FavTracks, FavArtists, ArtistTracks, Artist, Track
 from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds, FavoriteArtistIds, FavoriteAlbumIds, FavoritePlaylistIds
-from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
+from app.schemas.track import TrackResponse, SimilarTrackResponse, ArtistBriefForTrack
+from app.schemas.playlist import PlaylistResponse
+from app.schemas.artist import ArtistBrief
+from app.schemas.album import AlbumResponse
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.security import hash_password
+from app.api.tracks import build_track_response
+from app.api.playlists import build_playlist_response
+from app.api.albums import build_album_response
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -194,3 +201,52 @@ def search_users(
         query = query.filter(Users.username.ilike(f"%{q}%"))
     users = query.limit(limit).all()
     return users
+
+@router.get("/me/favorites/tracks", response_model=List[TrackResponse])
+def get_my_favorite_tracks(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == current_user.id).order_by(FavTracks.idx).all()
+    track_ids = [link.track_id for link in fav_links]
+    tracks = db.query(Track).filter(Track.id.in_(track_ids)).all() if track_ids else []
+    # Возвращаем в порядке добавления
+    track_map = {t.id: t for t in tracks}
+    ordered = [track_map[tid] for tid in track_ids if tid in track_map]
+    return [build_track_response(t, db) for t in ordered]
+
+@router.get("/me/favorites/playlists", response_model=List[PlaylistResponse])
+def get_my_favorite_playlists(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == current_user.id).order_by(FavPlaylists.idx).all()
+    playlist_ids = [link.playlist_id for link in fav_links]
+    playlists = db.query(Playlist).filter(Playlist.id.in_(playlist_ids)).all() if playlist_ids else []
+    pmap = {p.id: p for p in playlists}
+    ordered = [pmap[pid] for pid in playlist_ids if pid in pmap]
+    return [build_playlist_response(p, db) for p in ordered]
+
+@router.get("/me/favorites/artists", response_model=List[ArtistBrief])
+def get_my_favorite_artists(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == current_user.id).order_by(FavArtists.idx).all()
+    artist_ids = [link.artist_id for link in fav_links]
+    artists = db.query(Artist).filter(Artist.id.in_(artist_ids)).all() if artist_ids else []
+    amap = {a.id: a for a in artists}
+    ordered = [amap[aid] for aid in artist_ids if aid in amap]
+    return ordered
+
+@router.get("/me/favorites/albums", response_model=List[AlbumResponse])
+def get_my_favorite_albums(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == current_user.id).order_by(FavAlbums.idx).all()
+    album_ids = [link.album_id for link in fav_links]
+    albums = db.query(Album).filter(Album.id.in_(album_ids)).all() if album_ids else []
+    amap = {a.id: a for a in albums}
+    ordered = [amap[aid] for aid in album_ids if aid in amap]
+    return [build_album_response(a, db) for a in ordered]
