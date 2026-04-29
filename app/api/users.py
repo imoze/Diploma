@@ -4,8 +4,8 @@ from sqlalchemy import text, func
 from uuid import UUID
 
 from app.db.session import get_db
-from app.db.models import Users, FavTracks, FavArtists, ArtistTracks, Artist, Track
-from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds, FavoriteArtistIds
+from app.db.models import Users, FavPlaylists, FavAlbums, FavTracks, FavArtists, ArtistTracks, Artist, Track
+from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds, FavoriteArtistIds, FavoriteAlbumIds, FavoritePlaylistIds
 from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.security import hash_password
@@ -163,3 +163,21 @@ def get_my_favorite_artist_ids(
     fav_links = db.query(FavArtists).filter(FavArtists.user_id == current_user.id).all()
     artist_ids = [link.artist_id for link in fav_links]
     return {"artist_ids": artist_ids}
+
+@router.get("/me/favorites/album-ids", response_model=FavoriteAlbumIds)
+def get_my_favorite_album_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == current_user.id).all()
+    album_ids = [link.album_id for link in fav_links]
+    return {"album_ids": album_ids}
+
+@router.get("/me/favorites/playlist-ids", response_model=FavoritePlaylistIds)
+def get_my_favorite_playlist_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == current_user.id).all()
+    playlist_ids = [link.playlist_id for link in fav_links]
+    return {"playlist_ids": playlist_ids}
