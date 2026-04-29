@@ -181,3 +181,16 @@ def get_my_favorite_playlist_ids(
     fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == current_user.id).all()
     playlist_ids = [link.playlist_id for link in fav_links]
     return {"playlist_ids": playlist_ids}
+
+@router.get("/", response_model=list[UserProfileResponse])
+def search_users(
+    q: str | None = None,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Поиск пользователей по username (подстрока)."""
+    query = db.query(Users)
+    if q:
+        query = query.filter(Users.username.ilike(f"%{q}%"))
+    users = query.limit(limit).all()
+    return users
