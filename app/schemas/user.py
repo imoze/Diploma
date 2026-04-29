@@ -58,3 +58,9 @@ class FavoriteTrackIds(BaseModel):
 
 class FavoriteArtistIds(BaseModel):
     artist_ids: List[UUID]
+
+class FavoriteAlbumIds(BaseModel):
+    album_ids: List[UUID]
+
+class FavoritePlaylistIds(BaseModel):
+    playlist_ids: List[UUID]
