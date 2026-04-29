@@ -4,8 +4,8 @@ from sqlalchemy import text, func
 from uuid import UUID
 
 from app.db.session import get_db
-from app.db.models import Users, FavTracks, ArtistTracks, Artist, Track
-from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds
+from app.db.models import Users, FavTracks, FavArtists, ArtistTracks, Artist, Track
+from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds, FavoriteArtistIds
 from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.security import hash_password
@@ -154,3 +154,12 @@ def get_my_favorite_track_ids(
     fav_links = db.query(FavTracks).filter(FavTracks.user_id == current_user.id).all()
     track_ids = [link.track_id for link in fav_links]
     return {"track_ids": track_ids}
+
+@router.get("/me/favorites/artist-ids", response_model=FavoriteArtistIds)
+def get_my_favorite_artist_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == current_user.id).all()
+    artist_ids = [link.artist_id for link in fav_links]
+    return {"artist_ids": artist_ids}

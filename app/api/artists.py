@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from uuid import UUID
 from datetime import date
+from typing import List
 
 from app.db.session import get_db
 from app.db.models import Users, Artist, Album, Track, FavArtists, ArtistTracks, ArtistAlbums, ArtistMembers, Member, Role
 from app.schemas.common import MessageResponse
-from app.schemas.artist import ArtistCreate, ArtistUpdate, ArtistResponse, ArtistBrief
+from app.schemas.artist import AlbumBrief, TrackBrief, ArtistCreate, ArtistUpdate, ArtistResponse, ArtistBrief
 from app.core.deps import get_current_user, get_current_member, require_artist_membership
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
@@ -256,3 +257,31 @@ def unlike_artist(
     db.commit()
 
     return {"message": "Artist removed from favorites"}
+
+
+@router.get("/{artist_id}/tracks", response_model=List[TrackBrief])
+def get_artist_tracks(
+    artist_id: UUID,
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    tracks = db.query(Track).join(ArtistTracks).filter(
+        ArtistTracks.artist_id == artist_id
+    ).order_by(Track.plays.desc()).all()
+    return tracks
+
+
+@router.get("/{artist_id}/albums", response_model=List[AlbumBrief])
+def get_artist_albums(
+    artist_id: UUID,
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    albums = db.query(Album).join(ArtistAlbums).filter(
+        ArtistAlbums.artist_id == artist_id
+    ).order_by(Album.plays.desc()).all()
+    return albums
