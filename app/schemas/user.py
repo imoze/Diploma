@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from uuid import UUID
 from datetime import date
-from typing import Optional
+from typing import Optional, List
 
 # ----- Базовые схемы -----
 class UserBase(BaseModel):
@@ -52,3 +52,6 @@ class UserProfileUpdate(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+class FavoriteTrackIds(BaseModel):
+    track_ids: List[UUID]
