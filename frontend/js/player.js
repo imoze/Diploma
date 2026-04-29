@@ -85,14 +85,15 @@ class Player {
             this.currentTrack = track;
 
             // Формируем URL стрима
-            const streamUrl = `${API_BASE}/tracks/${trackId}/stream`;
+            // const streamUrl = `${API_BASE}/tracks/${trackId}/stream`;
+            const streamUrl = `${API_BASE}/tracks/${trackId}/stream?_t=${Date.now()}`;
             this.audio.src = streamUrl;
             this.audio.load();
 
             // Обновляем UI плеера
-            this.trackNameEl.textContent = track.name;
-            const artists = track.artists.map(a => a.name).join(', ');
-            this.artistNameEl.textContent = artists || 'Unknown Artist';
+            this.trackNameEl.innerHTML = `<a href="/frontend/track.html?id=${trackId}" сlass="player-track-link">${track.name}</a>`;
+            const artists = track.artists?.map(a => a.name).join(', ') || 'Unknown Artist';
+            this.artistNameEl.textContent = artists;
             // Для обложки пока ставим плейсхолдер
             this.coverEl.src = generateCoverPlaceholder(`${track.name}${track.id}`, 64);
 
@@ -259,7 +260,7 @@ class Player {
         if (!this.currentTrack) return;
         this.fullscreenOverlay.style.display = 'flex';
 
-        document.getElementById('fullscreen-track-name').textContent = this.currentTrack.name;
+        document.getElementById('fullscreen-track-name').innerHTML = `<a href="/frontend/track.html?id=${this.currentTrack.id}" class="player-track-link">${this.currentTrack.name}</a>`;
         const artists = this.currentTrack.artists?.map(a => a.name).join(', ') || 'Unknown';
         document.getElementById('fullscreen-artist-name').textContent = artists;
         document.getElementById('fullscreen-like').classList.toggle('liked', this.isLiked);

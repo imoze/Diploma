@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.db.session import get_db
 from app.db.models import Users, FavTracks, ArtistTracks, Artist, Track
-from app.schemas.user import UserProfileResponse, UserProfileUpdate
+from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds
 from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.security import hash_password
@@ -144,3 +144,13 @@ def get_my_wave(
             similarity=similarity
         ))
     return response
+
+@router.get("/me/favorites/ids", response_model=FavoriteTrackIds)
+def get_my_favorite_track_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Возвращает список ID треков, добавленных в избранное текущим пользователем."""
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == current_user.id).all()
+    track_ids = [link.track_id for link in fav_links]
+    return {"track_ids": track_ids}

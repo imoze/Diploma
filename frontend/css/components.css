@@ -302,3 +302,11 @@
     text-align: center;
     color: var(--text-secondary);
 }
+
+.player-track-link {
+    color: inherit;          /* наследует белый цвет */
+    text-decoration: none;
+}
+.player-track-link:hover {
+    color: var(--accent);    /* ультрафиолет при наведении */
+}
