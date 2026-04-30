@@ -42,12 +42,12 @@
 ---- player.js
 ---- utils.js
 ---- waveAnimation.js
--- pages/
 -- admin.html
 -- album.html
 -- artist.html
 -- index.html
 -- login.html
+-- my-wave.html
 -- playlist.html
 -- profile.html
 -- register.html
@@ -419,11 +419,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from uuid import UUID
 from datetime import date
+from typing import List
 
 from app.db.session import get_db
 from app.db.models import Users, Artist, Album, Track, FavArtists, ArtistTracks, ArtistAlbums, ArtistMembers, Member, Role
 from app.schemas.common import MessageResponse
-from app.schemas.artist import ArtistCreate, ArtistUpdate, ArtistResponse, ArtistBrief
+from app.schemas.artist import AlbumBrief, TrackBrief, ArtistCreate, ArtistUpdate, ArtistResponse, ArtistBrief
 from app.core.deps import get_current_user, get_current_member, require_artist_membership
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
@@ -672,6 +673,34 @@ def unlike_artist(
     db.commit()
 
     return {"message": "Artist removed from favorites"}
+
+
+@router.get("/{artist_id}/tracks", response_model=List[TrackBrief])
+def get_artist_tracks(
+    artist_id: UUID,
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    tracks = db.query(Track).join(ArtistTracks).filter(
+        ArtistTracks.artist_id == artist_id
+    ).order_by(Track.plays.desc()).all()
+    return tracks
+
+
+@router.get("/{artist_id}/albums", response_model=List[AlbumBrief])
+def get_artist_albums(
+    artist_id: UUID,
+    db: Session = Depends(get_db)
+):
+    artist = db.query(Artist).filter(Artist.id == artist_id).first()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    albums = db.query(Album).join(ArtistAlbums).filter(
+        ArtistAlbums.artist_id == artist_id
+    ).order_by(Album.plays.desc()).all()
+    return albums
 ```
 
 app/api/auth.py ```
@@ -766,7 +795,7 @@ def get_me(current_user: Users = Depends(get_current_user)):
 app/api/playlists.py ```
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, text
+from sqlalchemy import and_, or_, func, text, select
 from uuid import UUID
 from datetime import datetime
 
@@ -905,17 +934,17 @@ def get_playlists(
 
     if my and current_user:
         # Плейлисты, где пользователь участник (владелец или коллаборатор)
-        subquery = db.query(UserPlaylists.playlist_id).filter(
+        subquery = select(UserPlaylists.playlist_id).where(
             UserPlaylists.user_id == current_user.id
-        ).subquery()
+        ).scalar_subquery()
         query = query.filter(Playlist.id.in_(subquery))
     else:
         # Публичные плейлисты и приватные где пользователь владелец или коллаборатор 
         conditions = [Playlist.is_public == True]
         if current_user:
-            user_playlists_subquery = db.query(UserPlaylists.playlist_id).filter(
+            user_playlists_subquery = select(UserPlaylists.playlist_id).where(
                 UserPlaylists.user_id == current_user.id
-            ).subquery()
+            ).scalar_subquery()
             conditions.append(Playlist.id.in_(user_playlists_subquery))
         query = query.filter(or_(*conditions))
 
@@ -1654,13 +1683,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from uuid import UUID
+from typing import List
 
 from app.db.session import get_db
-from app.db.models import Users, FavTracks, ArtistTracks, Artist, Track
-from app.schemas.user import UserProfileResponse, UserProfileUpdate
-from app.schemas.track import SimilarTrackResponse, ArtistBriefForTrack
+from app.db.models import Album, Playlist, Users, FavPlaylists, FavAlbums, FavTracks, FavArtists, ArtistTracks, Artist, Track
+from app.schemas.user import UserProfileResponse, UserProfileUpdate, FavoriteTrackIds, FavoriteArtistIds, FavoriteAlbumIds, FavoritePlaylistIds
+from app.schemas.track import TrackResponse, SimilarTrackResponse, ArtistBriefForTrack
+from app.schemas.playlist import PlaylistResponse
+from app.schemas.artist import ArtistBrief
+from app.schemas.album import AlbumResponse
 from app.core.deps import get_current_user, get_current_user_optional
 from app.core.security import hash_password
+from app.api.tracks import build_track_response
+from app.api.playlists import build_playlist_response
+from app.api.albums import build_album_response
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -1796,6 +1832,105 @@ def get_my_wave(
             similarity=similarity
         ))
     return response
+
+@router.get("/me/favorites/ids", response_model=FavoriteTrackIds)
+def get_my_favorite_track_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Возвращает список ID треков, добавленных в избранное текущим пользователем."""
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == current_user.id).all()
+    track_ids = [link.track_id for link in fav_links]
+    return {"track_ids": track_ids}
+
+@router.get("/me/favorites/artist-ids", response_model=FavoriteArtistIds)
+def get_my_favorite_artist_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == current_user.id).all()
+    artist_ids = [link.artist_id for link in fav_links]
+    return {"artist_ids": artist_ids}
+
+@router.get("/me/favorites/album-ids", response_model=FavoriteAlbumIds)
+def get_my_favorite_album_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == current_user.id).all()
+    album_ids = [link.album_id for link in fav_links]
+    return {"album_ids": album_ids}
+
+@router.get("/me/favorites/playlist-ids", response_model=FavoritePlaylistIds)
+def get_my_favorite_playlist_ids(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == current_user.id).all()
+    playlist_ids = [link.playlist_id for link in fav_links]
+    return {"playlist_ids": playlist_ids}
+
+@router.get("/", response_model=list[UserProfileResponse])
+def search_users(
+    q: str | None = None,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Поиск пользователей по username (подстрока)."""
+    query = db.query(Users)
+    if q:
+        query = query.filter(Users.username.ilike(f"%{q}%"))
+    users = query.limit(limit).all()
+    return users
+
+@router.get("/me/favorites/tracks", response_model=List[TrackResponse])
+def get_my_favorite_tracks(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == current_user.id).order_by(FavTracks.idx).all()
+    track_ids = [link.track_id for link in fav_links]
+    tracks = db.query(Track).filter(Track.id.in_(track_ids)).all() if track_ids else []
+    # Возвращаем в порядке добавления
+    track_map = {t.id: t for t in tracks}
+    ordered = [track_map[tid] for tid in track_ids if tid in track_map]
+    return [build_track_response(t, db) for t in ordered]
+
+@router.get("/me/favorites/playlists", response_model=List[PlaylistResponse])
+def get_my_favorite_playlists(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == current_user.id).order_by(FavPlaylists.idx).all()
+    playlist_ids = [link.playlist_id for link in fav_links]
+    playlists = db.query(Playlist).filter(Playlist.id.in_(playlist_ids)).all() if playlist_ids else []
+    pmap = {p.id: p for p in playlists}
+    ordered = [pmap[pid] for pid in playlist_ids if pid in pmap]
+    return [build_playlist_response(p, db) for p in ordered]
+
+@router.get("/me/favorites/artists", response_model=List[ArtistBrief])
+def get_my_favorite_artists(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == current_user.id).order_by(FavArtists.idx).all()
+    artist_ids = [link.artist_id for link in fav_links]
+    artists = db.query(Artist).filter(Artist.id.in_(artist_ids)).all() if artist_ids else []
+    amap = {a.id: a for a in artists}
+    ordered = [amap[aid] for aid in artist_ids if aid in amap]
+    return ordered
+
+@router.get("/me/favorites/albums", response_model=List[AlbumResponse])
+def get_my_favorite_albums(
+    current_user: Users = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == current_user.id).order_by(FavAlbums.idx).all()
+    album_ids = [link.album_id for link in fav_links]
+    albums = db.query(Album).filter(Album.id.in_(album_ids)).all() if album_ids else []
+    amap = {a.id: a for a in albums}
+    ordered = [amap[aid] for aid in album_ids if aid in amap]
+    return [build_album_response(a, db) for a in ordered]
 ```
 
 app/core/config.py ```
@@ -2761,7 +2896,7 @@ app/schemas/user.py ```
 from pydantic import BaseModel, EmailStr, field_validator
 from uuid import UUID
 from datetime import date
-from typing import Optional
+from typing import Optional, List
 
 # ----- Базовые схемы -----
 class UserBase(BaseModel):
@@ -2812,6 +2947,18 @@ class UserProfileUpdate(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+class FavoriteTrackIds(BaseModel):
+    track_ids: List[UUID]
+
+class FavoriteArtistIds(BaseModel):
+    artist_ids: List[UUID]
+
+class FavoriteAlbumIds(BaseModel):
+    album_ids: List[UUID]
+
+class FavoritePlaylistIds(BaseModel):
+    playlist_ids: List[UUID]
 ```
 
 app/main.py ```
@@ -3444,6 +3591,14 @@ frontend/css/components.css ```
     text-align: center;
     color: var(--text-secondary);
 }
+
+.player-track-link {
+    color: inherit;          /* наследует белый цвет */
+    text-decoration: none;
+}
+.player-track-link:hover {
+    color: var(--accent);    /* ультрафиолет при наведении */
+}
 ```
 
 frontend/css/global.css ```
@@ -3561,7 +3716,7 @@ export async function apiRequest(endpoint, options = {}) {
     if (response.status === 401) {
         // Токен истёк или невалиден
         localStorage.removeItem('access_token');
-        window.location.href = '/login.html';
+        window.location.href = '/frontend/login.html';
         throw new Error('Unauthorized');
     }
 
@@ -3733,14 +3888,15 @@ class Player {
             this.currentTrack = track;
 
             // Формируем URL стрима
-            const streamUrl = `${API_BASE}/tracks/${trackId}/stream`;
+            // const streamUrl = `${API_BASE}/tracks/${trackId}/stream`;
+            const streamUrl = `${API_BASE}/tracks/${trackId}/stream?_t=${Date.now()}`;
             this.audio.src = streamUrl;
             this.audio.load();
 
             // Обновляем UI плеера
-            this.trackNameEl.textContent = track.name;
-            const artists = track.artists.map(a => a.name).join(', ');
-            this.artistNameEl.textContent = artists || 'Unknown Artist';
+            this.trackNameEl.innerHTML = `<a href="/frontend/track.html?id=${trackId}" class="player-track-link">${track.name}</a>`;
+            const artists = track.artists?.map(a => a.name).join(', ') || 'Unknown Artist';
+            this.artistNameEl.textContent = artists;
             // Для обложки пока ставим плейсхолдер
             this.coverEl.src = generateCoverPlaceholder(`${track.name}${track.id}`, 64);
 
@@ -3907,7 +4063,7 @@ class Player {
         if (!this.currentTrack) return;
         this.fullscreenOverlay.style.display = 'flex';
 
-        document.getElementById('fullscreen-track-name').textContent = this.currentTrack.name;
+        document.getElementById('fullscreen-track-name').innerHTML = `<a href="/frontend/track.html?id=${this.currentTrack.id}" class="player-track-link">${this.currentTrack.name}</a>`;
         const artists = this.currentTrack.artists?.map(a => a.name).join(', ') || 'Unknown';
         document.getElementById('fullscreen-artist-name').textContent = artists;
         document.getElementById('fullscreen-like').classList.toggle('liked', this.isLiked);
@@ -4263,11 +4419,776 @@ frontend/admin.html ```
 ```
 
 frontend/album.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Альбом</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        .album-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        .album-header {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 48px;
+        }
+        .album-cover {
+            width: 250px;
+            height: 250px;
+            border-radius: var(--radius-lg);
+            background: var(--bg-card);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .album-info {
+            flex: 1;
+        }
+        .album-type {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .album-name {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .album-artists {
+            font-size: 18px;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .album-artists a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .album-artists a:hover {
+            text-decoration: underline;
+        }
+        .album-meta {
+            display: flex;
+            gap: 24px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+        .album-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+        .tracks-list {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 8px 0;
+        }
+        .track-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .track-item:hover {
+            background: rgba(138, 92, 255, 0.08);
+        }
+        .track-index {
+            width: 32px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .track-info {
+            flex: 1;
+        }
+        .track-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .track-artists {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .track-duration {
+            color: var(--text-secondary);
+            margin-left: 16px;
+            font-size: 14px;
+        }
+        .track-play-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: var(--transition);
+            margin-left: 8px;
+        }
+        .track-play-btn:hover {
+            color: var(--accent);
+            background: rgba(138, 92, 255, 0.1);
+        }
+        .error-message {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Хедер -->
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
+            U<span style="color: var(--accent);">:</span>V
+        </a>
+        <div class="header-actions">
+            <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+        </div>
+    </header>
 
+    <main class="album-page">
+        <div id="album-content"></div>
+        <div id="error-message" class="error-message" style="display: none;"></div>
+    </main>
+
+    <!-- Глобальный плеер -->
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
+
+    <script>
+        (function createPlayerDOM() {
+            const bar = document.getElementById('player-bar');
+            bar.innerHTML = `
+                <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
+                <div class="player-info">
+                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
+                    <div id="player-artist-name" class="player-artist-name"></div>
+                </div>
+                <div class="player-controls">
+                    <button id="player-play" class="player-btn">▶</button>
+                    <button id="player-next" class="player-btn">⏭</button>
+                </div>
+                <div class="player-progress-container">
+                    <span id="player-current-time" class="player-time">0:00</span>
+                    <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
+                    <span id="player-duration" class="player-time">0:00</span>
+                </div>
+                <div class="player-actions">
+                    <button id="player-like" class="player-btn">❤️</button>
+                    <button id="player-wave" class="player-btn">🌊</button>
+                    <button id="player-expand" class="player-btn">⤢</button>
+                </div>
+            `;
+        })();
+    </script>
+
+    <!-- Стили плеера -->
+    <style>
+        .player-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%; height: 180px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            padding: 20px 32px; display: flex; align-items: center; gap: 24px;
+            z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; align-items: center; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress {
+            flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px;
+            -webkit-appearance: none; appearance: none;
+        }
+        .player-progress::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+        }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn {
+            background: none; border: none; color: var(--text-secondary); font-size: 24px;
+            cursor: pointer; transition: var(--transition); width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
+        .player-btn.liked { color: var(--accent); }
+    </style>
+
+    <script type="module">
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';
+        import { player } from './js/player.js';
+        import { api } from './js/api.js';
+        import { formatTime, generateCoverPlaceholder } from './js/utils.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const albumId = params.get('id');
+        const contentDiv = document.getElementById('album-content');
+        const errorDiv = document.getElementById('error-message');
+
+        // Хедер
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (isAuthenticated()) {
+                const user = await getCurrentUser();
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'flex';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                } else {
+                    localStorage.removeItem('access_token');
+                    loginBtn.style.display = 'inline-flex';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'inline-flex';
+                avatar.style.display = 'none';
+            }
+        }
+
+        // Загрузка альбома
+        async function loadAlbum() {
+            if (!albumId) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Не указан ID альбома';
+                return;
+            }
+            try {
+                const album = await api.get(`/albums/${albumId}`);
+                // Проверяем, лайкнут ли альбом
+                let isLiked = false;
+                if (isAuthenticated()) {
+                    try {
+                        const data = await api.get('/users/me/favorites/album-ids');
+                        if (data && data.album_ids) {
+                            isLiked = data.album_ids.some(id => id === albumId);
+                        }
+                    } catch (e) {
+                        console.warn('Не удалось проверить избранное альбома', e);
+                    }
+                }
+                renderAlbum(album, isLiked);
+            } catch (e) {
+                console.error(e);
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Альбом не найден';
+            }
+        }
+
+        function renderAlbum(album, isLiked = false) {
+            const coverSrc = generateCoverPlaceholder(`${album.name}${album.id}`, 250);
+            const albumType = album.album_type?.name || 'Альбом';
+            const artists = album.artists || [];
+            const tracks = album.tracks || [];
+
+            const artistsLinks = artists.map(a =>
+                `<a href="/frontend/artist.html?id=${a.id}">${a.name}</a>`
+            ).join(', ');
+
+            const totalDuration = tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
+            const likeBtnText = isLiked ? '❤️ Убрать лайк' : '❤️ Нравится';
+
+            let html = `
+                <div class="album-header">
+                    <img class="album-cover" src="${coverSrc}" alt="${album.name}">
+                    <div class="album-info">
+                        <div class="album-type">${albumType}</div>
+                        <h1 class="album-name">${album.name}</h1>
+                        <div class="album-artists">${artistsLinks || 'Разные исполнители'}</div>
+                        <div class="album-meta">
+                            <span>📅 ${album.release_date || '—'}</span>
+                            <span>⏱ ${formatTime(totalDuration)}</span>
+                            <span>🎵 ${tracks.length} треков</span>
+                            <span id="album-likes">❤️ ${album.likes}</span>
+                        </div>
+                        <div class="album-actions">
+                            <button class="btn btn-accent" id="play-all-btn">▶ Воспроизвести всё</button>
+                            <button class="btn" id="like-album-btn">${likeBtnText}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Список треков
+            if (tracks.length) {
+                html += '<h2 class="section-title">Треки</h2><div class="tracks-list">';
+                tracks.forEach((track, idx) => {
+                    const trackArtists = track.artists?.map(a => a.name).join(', ') || artists.map(a => a.name).join(', ');
+                    const duration = formatTime(track.duration);
+                    html += `
+                        <div class="track-item" data-id="${track.id}">
+                            <div class="track-index">${idx + 1}</div>
+                            <div class="track-info">
+                                <div class="track-name">${track.name}</div>
+                                <div class="track-artists">${trackArtists}</div>
+                            </div>
+                            <div class="track-duration">${duration}</div>
+                            <button class="track-play-btn" title="Воспроизвести">▶</button>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+
+            contentDiv.innerHTML = html;
+
+            // Обработчик «Воспроизвести всё» – загружаем первый трек в плеер
+            const playAllBtn = document.getElementById('play-all-btn');
+            if (playAllBtn && tracks.length) {
+                playAllBtn.addEventListener('click', () => {
+                    player.loadTrack(tracks[0].id);
+                });
+            }
+
+            // Обработчики треков
+            document.querySelectorAll('.track-item').forEach(item => {
+                const playBtn = item.querySelector('.track-play-btn');
+                const trackId = item.dataset.id;
+                item.addEventListener('click', (e) => {
+                    if (e.target === playBtn || playBtn.contains(e.target)) return;
+                    window.location.href = `/frontend/track.html?id=${trackId}`;
+                });
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    player.loadTrack(trackId);
+                });
+            });
+
+            // Лайк альбома
+            const likeBtn = document.getElementById('like-album-btn');
+            if (likeBtn) {
+                likeBtn.addEventListener('click', async () => {
+                    const likesSpan = document.getElementById('album-likes');
+                    try {
+                        await api.post(`/albums/${album.id}/like`);
+                        likeBtn.textContent = '❤️ Убрать лайк';
+                        const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || album.likes);
+                        likesSpan.textContent = `❤️ ${current + 1}`;
+                    } catch (e) {
+                        if (e.message.includes('already')) {
+                            await api.delete(`/albums/${album.id}/like`);
+                            likeBtn.textContent = '❤️ Нравится';
+                            const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || album.likes);
+                            likesSpan.textContent = `❤️ ${Math.max(0, current - 1)}`;
+                        }
+                    }
+                });
+            }
+        }
+
+        updateHeader();
+        loadAlbum();
+    </script>
+</body>
+</html>
 ```
 
 frontend/artist.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Артист</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        .artist-page {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        .artist-header {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 48px;
+        }
+        .artist-avatar {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .artist-info {
+            flex: 1;
+        }
+        .artist-name {
+            font-size: 36px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .artist-dates {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        .artist-description {
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .artist-stats {
+            display: flex;
+            gap: 24px;
+            color: var(--text-secondary);
+        }
+        .artist-actions {
+            margin-top: 16px;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        .albums-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+        .tracks-list {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 8px 0;
+            margin-bottom: 48px;
+        }
+        .track-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .track-item:hover {
+            background: rgba(138, 92, 255, 0.08);
+        }
+        .track-index {
+            width: 32px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .track-info {
+            flex: 1;
+        }
+        .track-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .track-meta {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .track-duration {
+            color: var(--text-secondary);
+            margin-left: 16px;
+            font-size: 14px;
+        }
+        .track-play-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: var(--transition);
+            margin-left: 8px;
+        }
+        .track-play-btn:hover {
+            color: var(--accent);
+            background: rgba(138,92,255,0.1);
+        }
+        .error-message {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Хедер -->
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
+            U<span style="color: var(--accent);">:</span>V
+        </a>
+        <div class="header-actions">
+            <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+        </div>
+    </header>
 
+    <main class="artist-page">
+        <div id="artist-content"></div>
+        <div id="error-message" class="error-message" style="display: none;"></div>
+    </main>
+
+    <!-- Глобальный плеер -->
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
+
+    <!-- Инициализация структуры плеера -->
+    <script>
+        (function createPlayerDOM() {
+            const bar = document.getElementById('player-bar');
+            bar.innerHTML = `
+                <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
+                <div class="player-info">
+                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
+                    <div id="player-artist-name" class="player-artist-name"></div>
+                </div>
+                <div class="player-controls">
+                    <button id="player-play" class="player-btn">▶</button>
+                    <button id="player-next" class="player-btn">⏭</button>
+                </div>
+                <div class="player-progress-container">
+                    <span id="player-current-time" class="player-time">0:00</span>
+                    <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
+                    <span id="player-duration" class="player-time">0:00</span>
+                </div>
+                <div class="player-actions">
+                    <button id="player-like" class="player-btn">❤️</button>
+                    <button id="player-wave" class="player-btn">🌊</button>
+                    <button id="player-expand" class="player-btn">⤢</button>
+                </div>
+            `;
+        })();
+    </script>
+
+    <!-- Стили плеера -->
+    <style>
+        .player-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%; height: 180px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            padding: 20px 32px; display: flex; align-items: center; gap: 24px;
+            z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; align-items: center; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress {
+            flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px;
+            -webkit-appearance: none; appearance: none;
+        }
+        .player-progress::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+        }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn {
+            background: none; border: none; color: var(--text-secondary); font-size: 24px;
+            cursor: pointer; transition: var(--transition); width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
+        .player-btn.liked { color: var(--accent); }
+    </style>
+
+    <script type="module">
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';
+        import { player } from './js/player.js';
+        import { api } from './js/api.js';
+        import { formatTime, generateCoverPlaceholder } from './js/utils.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const artistId = params.get('id');
+        const contentDiv = document.getElementById('artist-content');
+        const errorDiv = document.getElementById('error-message');
+
+        // Хедер
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (isAuthenticated()) {
+                const user = await getCurrentUser();
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'flex';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                } else {
+                    localStorage.removeItem('access_token');
+                    loginBtn.style.display = 'inline-flex';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'inline-flex';
+                avatar.style.display = 'none';
+            }
+        }
+
+        // Загрузка всех данных
+        async function loadArtist() {
+            if (!artistId) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Не указан ID артиста';
+                return;
+            }
+            try {
+                // Основная информация
+                const artist = await api.get(`/artists/${artistId}`);
+                // Проверяем, лайкнут ли артист
+                let isLiked = false;
+                if (isAuthenticated()) {
+                    try {
+                        const data = await api.get('/users/me/favorites/artist-ids');
+                        if (data && data.artist_ids) {
+                            isLiked = data.artist_ids.some(id => id === artistId);
+                        }
+                    } catch (e) {
+                        console.warn('Не удалось проверить избранное артиста', e);
+                    }
+                }
+                // Загружаем все треки и альбомы (отсортированные по популярности)
+                const [allTracks, allAlbums] = await Promise.all([
+                    api.get(`/artists/${artistId}/tracks`),
+                    api.get(`/artists/${artistId}/albums`)
+                ]);
+                renderArtist(artist, allTracks, allAlbums, isLiked);
+            } catch (e) {
+                console.error(e);
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Артист не найден';
+            }
+        }
+
+        function renderArtist(artist, tracks, albums, isLiked = false) {
+            const coverSrc = generateCoverPlaceholder(`${artist.name}${artist.id}`, 250);
+            const datesStr = artist.disbandment_date
+                ? `${artist.formation_date} — ${artist.disbandment_date}`
+                : `${artist.formation_date} — настоящее время`;
+            const description = artist.description || '';
+            const likeBtnText = isLiked ? '❤️ Убрать лайк' : '❤️ Нравится';
+
+            let html = `
+                <div class="artist-header">
+                    <img class="artist-avatar" src="${coverSrc}" alt="${artist.name}">
+                    <div class="artist-info">
+                        <h1 class="artist-name">${artist.name}</h1>
+                        <div class="artist-dates">${datesStr}</div>
+                        ${description ? `<p class="artist-description">${description}</p>` : ''}
+                        <div class="artist-stats">
+                            <span id="artist-likes">❤️ ${artist.likes}</span>
+                            <span id="artist-plays">▶ ${artist.plays}</span>
+                        </div>
+                        <div class="artist-actions">
+                            <button class="btn" id="like-artist-btn">${likeBtnText}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Альбомы (если есть)
+            if (albums && albums.length) {
+                html += '<h2 class="section-title">Альбомы</h2><div class="albums-grid">';
+                albums.forEach(album => {
+                    const albumCover = generateCoverPlaceholder(`${album.name}${album.id}`, 250);
+                    html += `
+                        <div class="card" data-id="${album.id}" style="cursor: pointer;">
+                            <img class="card-img" src="${albumCover}" alt="${album.name}">
+                            <div class="card-title">${album.name}</div>
+                            <div class="card-subtitle">${album.release_date} · ▶ ${album.plays}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+
+            // Все треки
+            if (tracks && tracks.length) {
+                html += '<h2 class="section-title">Треки</h2><div class="tracks-list">';
+                tracks.forEach((track, idx) => {
+                    const duration = formatTime(track.duration);
+                    html += `
+                        <div class="track-item" data-id="${track.id}">
+                            <div class="track-index">${idx + 1}</div>
+                            <div class="track-info">
+                                <div class="track-name">${track.name}</div>
+                                <div class="track-meta">▶ ${track.plays} · ❤️ ${track.likes}</div>
+                            </div>
+                            <div class="track-duration">${duration}</div>
+                            <button class="track-play-btn" title="Воспроизвести">▶</button>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+
+            contentDiv.innerHTML = html;
+
+            // Обработчики альбомов
+            document.querySelectorAll('.card').forEach(card => {
+                card.addEventListener('click', () => {
+                    window.location.href = `/frontend/album.html?id=${card.dataset.id}`;
+                });
+            });
+
+            // Обработчики треков
+            document.querySelectorAll('.track-item').forEach(item => {
+                const playBtn = item.querySelector('.track-play-btn');
+                const trackId = item.dataset.id;
+                item.addEventListener('click', (e) => {
+                    if (e.target === playBtn || playBtn.contains(e.target)) return;
+                    window.location.href = `/frontend/track.html?id=${trackId}`;
+                });
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    player.loadTrack(trackId);
+                });
+            });
+
+            // Кнопка лайка артиста
+            const likeBtn = document.getElementById('like-artist-btn');
+            if (likeBtn) {
+                likeBtn.addEventListener('click', async () => {
+                    const likesSpan = document.getElementById('artist-likes');
+                    try {
+                        await api.post(`/artists/${artist.id}/like`);
+                        likeBtn.textContent = '❤️ Убрать лайк';
+                        const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || artist.likes);
+                        likesSpan.textContent = `❤️ ${current + 1}`;
+                    } catch (e) {
+                        if (e.message.includes('already')) {
+                            await api.delete(`/artists/${artist.id}/like`);
+                            likeBtn.textContent = '❤️ Нравится';
+                            const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || artist.likes);
+                            likesSpan.textContent = `❤️ ${Math.max(0, current - 1)}`;
+                        }
+                    }
+                });
+            }
+        }
+
+        updateHeader();
+        loadArtist();
+    </script>
+</body>
+</html>
 ```
 
 frontend/index.html ```
@@ -4306,6 +5227,12 @@ frontend/index.html ```
             height: 40px;
             border-radius: 50%;
             background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--accent);
+            cursor: pointer;
         }
         .main-content {
             padding: 40px 32px;
@@ -4542,7 +5469,7 @@ frontend/index.html ```
                 window.location.href = '/frontend/login.html';
                 return;
             }
-            window.location.href = '/frontend/pages/my-wave.html';
+            window.location.href = '/frontend/my-wave.html';
         });
 
         // --- Инициализация ---
@@ -4655,7 +5582,7 @@ frontend/index.html ```
             bar.innerHTML = `
                 <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
                 <div class="player-info">
-                    <div id="player-track-name" class="player-track-name">Не выбран трек</div>
+                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
                     <div id="player-artist-name" class="player-artist-name"></div>
                 </div>
                 <div class="player-controls">
@@ -4840,12 +5767,1056 @@ frontend/login.html ```
 </html>
 ```
 
-frontend/playlist.html ```
+frontend/my-wave.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>U:V · Моя волна</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        .wave-page { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+        .wave-title { font-size: 32px; font-weight: 600; margin-bottom: 24px; }
+        .wave-list { background: var(--bg-card); border-radius: var(--radius-lg); padding: 8px 0; }
+        .wave-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; }
+        .wave-item:hover { background: rgba(138, 92, 255, 0.08); }
+        .uv-index { font-family: monospace; font-size: 20px; color: var(--accent); min-width: 80px; }
+        .wave-track-info { flex: 1; }
+        .wave-track-name { font-weight: 500; }
+        .wave-track-artists { font-size: 14px; color: var(--text-secondary); }
+        .play-btn { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 8px; }
+        .loading, .empty { text-align: center; padding: 40px; color: var(--text-secondary); }
+        
+        /* Стили плеера */
+        .player-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            z-index: 1000;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; align-items: center; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress {
+            flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px;
+            -webkit-appearance: none; appearance: none;
+        }
+        .player-progress::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+        }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn {
+            background: none; border: none; color: var(--text-secondary); font-size: 24px;
+            cursor: pointer; transition: var(--transition); width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
+        .player-btn.liked { color: var(--accent); }
+    </style>
+</head>
+<body>
+    <header style="display: flex; justify-content: space-between; padding: 24px 32px;">
+        <a href="/frontend/index.html" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">U<span style="color: var(--accent);">:</span>V</a>
+        <a href="/frontend/profile.html" class="btn">Профиль</a>
+    </header>
 
+    <main class="wave-page">
+        <h1 class="wave-title">🌊 Моя волна</h1>
+        <div id="wave-container"><div class="loading">Ищем музыку...</div></div>
+    </main>
+
+    <!-- Глобальный плеер -->
+    <div id="player-bar" style="display: none;"></div>
+    <script>
+        // Вставка структуры плеера
+        document.getElementById('player-bar').innerHTML = `
+            <img id="player-cover" class="player-cover" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%2316112A'/%3E%3C/svg%3E" alt="cover">
+            <div class="player-info">
+                <div id="player-track-name" class="player-track-link">Не выбран трек</div>
+                <div id="player-artist-name" class="player-artist-name"></div>
+            </div>
+            <div class="player-controls">
+                <button id="player-play" class="player-btn">▶</button>
+                <button id="player-next" class="player-btn">⏭</button>
+            </div>
+            <div class="player-progress-container">
+                <span id="player-current-time" class="player-time">0:00</span>
+                <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
+                <span id="player-duration" class="player-time">0:00</span>
+            </div>
+            <div class="player-actions">
+                <button id="player-like" class="player-btn">❤️</button>
+                <button id="player-wave" class="player-btn">🌊</button>
+                <button id="player-expand" class="player-btn">⤢</button>
+            </div>
+        `;
+    </script>
+
+    <script type="module">
+        import { requireAuth } from './js/auth.js';
+        import { api } from './js/api.js';
+        import { player } from './js/player.js';
+
+        requireAuth();
+
+        (async () => {
+            const container = document.getElementById('wave-container');
+            try {
+                const tracks = await api.get('/users/me/wave');
+                if (!Array.isArray(tracks) || tracks.length === 0) {
+                    container.innerHTML = '<div class="empty">Нет рекомендаций. Поставьте лайки.</div>';
+                    return;
+                }
+                container.innerHTML = '<div class="wave-list">' + tracks.map(t => {
+                    const artists = (t.artists || []).map(a => a.name).join(', ');
+                    const uv = t.similarity ? Math.round(t.similarity) : '—';
+                    return `<div class="wave-item" data-id="${t.id}">
+                        <span class="uv-index">UV ${uv}</span>
+                        <div class="wave-track-info">
+                            <div class="wave-track-name">${t.name}</div>
+                            <div class="wave-track-artists">${artists}</div>
+                        </div>
+                        <button class="play-btn">▶</button>
+                    </div>`;
+                }).join('') + '</div>';
+
+                document.querySelectorAll('.wave-item').forEach(item => {
+                    const btn = item.querySelector('.play-btn');
+                    const id = item.dataset.id;
+                    item.addEventListener('click', e => {
+                        if (e.target === btn || btn.contains(e.target)) return;
+                        window.location.href = `/frontend/track.html?id=${id}`;
+                    });
+                    btn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        player.loadTrack(id);
+                    });
+                });
+            } catch (err) {
+                container.innerHTML = '<div class="empty">Ошибка: ' + err.message + '</div>';
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+</html>
+```
+
+frontend/playlist.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Плейлист</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        /* Все стили оставлены как в последней версии, без изменений */
+        .playlist-page { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+        .playlist-header { display: flex; gap: 32px; margin-bottom: 48px; }
+        .playlist-cover { width: 250px; height: 250px; border-radius: var(--radius-lg); background: var(--bg-card); object-fit: cover; flex-shrink: 0; }
+        .playlist-info { flex: 1; }
+        .playlist-type { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .playlist-name { font-size: 32px; font-weight: 600; margin-bottom: 12px; }
+        .playlist-owner { font-size: 16px; color: var(--accent); margin-bottom: 16px; }
+        .playlist-meta { display: flex; gap: 24px; color: var(--text-secondary); margin-bottom: 24px; }
+        .playlist-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+        .section-title { font-size: 24px; font-weight: 500; margin-bottom: 16px; }
+        .tracks-list { background: var(--bg-card); border-radius: var(--radius-lg); padding: 8px 0; margin-bottom: 48px; }
+        .track-item { display: flex; align-items: center; padding: 12px 16px; transition: background 0.2s; cursor: pointer; }
+        .track-item:hover { background: rgba(138, 92, 255, 0.08); }
+        .track-item.dragging { opacity: 0.5; }
+        .track-index { width: 32px; color: var(--text-secondary); font-size: 14px; }
+        .track-info { flex: 1; }
+        .track-name { font-weight: 500; color: var(--text-primary); }
+        .track-artists { font-size: 14px; color: var(--text-secondary); }
+        .track-duration { color: var(--text-secondary); margin-left: 16px; font-size: 14px; }
+        .track-play-btn { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 8px; border-radius: 50%; transition: var(--transition); margin-left: 8px; }
+        .track-play-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
+        .track-remove-btn { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 8px; border-radius: 50%; transition: var(--transition); margin-left: 4px; display: none; }
+        .track-remove-btn:hover { color: #ff5c5c; background: rgba(255,92,92,0.1); }
+        .edit-controls { margin-top: 16px; display: none; }
+        .rename-form, .privacy-form, .collaborators-section { margin-bottom: 12px; }
+        .rename-form input, .add-track-form input, .collab-search input { background: var(--bg-deep); border: 1px solid transparent; border-radius: var(--radius-md); padding: 10px 14px; color: var(--text-primary); font-size: 16px; outline: none; flex: 1; transition: border-color 0.2s; }
+        .rename-form input:focus, .add-track-form input:focus, .collab-search input:focus { border-color: var(--accent); }
+        .search-track-wrapper, .collab-search { position: relative; flex: 1; }
+        .search-track-dropdown, .collab-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-card); border-radius: var(--radius-lg); padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 1001; max-height: 200px; overflow-y: auto; }
+        .delete-playlist-btn { color: #ff5c5c; margin-top: 8px; }
+        .collab-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+        .collab-tag { background: var(--bg-card); padding: 4px 12px; border-radius: 20px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        .collab-tag button { background: none; border: none; color: var(--text-secondary); cursor: pointer; }
+        .collab-tag button:hover { color: #ff5c5c; }
+        .wave-results { margin-top: 48px; }
+        .wave-list { background: var(--bg-card); border-radius: var(--radius-lg); padding: 8px 0; }
+        .wave-item { display: flex; align-items: center; padding: 12px 16px; transition: background 0.2s; cursor: pointer; }
+        .wave-item:hover { background: rgba(138,92,255,0.08); }
+        .wave-index { font-family: var(--font-mono); font-size: 20px; color: var(--accent); min-width: 80px; margin-right: 16px; }
+        .wave-info { flex: 1; }
+        .wave-track-name { font-weight: 500; color: var(--text-primary); }
+        .wave-track-artists { font-size: 14px; color: var(--text-secondary); }
+        .wave-play-btn { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 8px; border-radius: 50%; }
+        .wave-play-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
+        .empty-message { text-align: center; padding: 40px; color: var(--text-secondary); }
+        .error-message { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">U<span style="color: var(--accent);">:</span>V</a>
+        <div class="header-actions">
+            <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+        </div>
+    </header>
+    <main class="playlist-page">
+        <div id="playlist-content"></div>
+        <div id="error-message" class="error-message" style="display: none;"></div>
+    </main>
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
+    <script>(function createPlayerDOM() {
+        const bar = document.getElementById('player-bar');
+        bar.innerHTML = `<img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover"><div class="player-info"><div id="player-track-name" class="player-track-link">Не выбран трек</div><div id="player-artist-name" class="player-artist-name"></div></div><div class="player-controls"><button id="player-play" class="player-btn">▶</button><button id="player-next" class="player-btn">⏭</button></div><div class="player-progress-container"><span id="player-current-time" class="player-time">0:00</` + `span><input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0"><span id="player-duration" class="player-time">0:00</span></div><div class="player-actions"><button id="player-like" class="player-btn">❤️</button><button id="player-wave" class="player-btn">🌊</button><button id="player-expand" class="player-btn">⤢</button></div>`;
+    })();</script>
+    <style>.player-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 180px; background: var(--bg-card); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 20px 32px; display: flex; align-items: center; gap: 24px; z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); } .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; } .player-info { flex: 1; min-width: 200px; } .player-track-name { font-size: 18px; font-weight: 500; } .player-artist-name { font-size: 14px; color: var(--text-secondary); } .player-controls { display: flex; align-items: center; gap: 16px; } .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; } .player-progress { flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px; -webkit-appearance: none; appearance: none; } .player-progress::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); cursor: pointer; } .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; } .player-actions { display: flex; gap: 16px; margin-left: auto; } .player-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; transition: var(--transition); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; } .player-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); } .player-btn.liked { color: var(--accent); }</style>
+    <script type="module">
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';
+        import { player } from './js/player.js';
+        import { api } from './js/api.js';
+        import { formatTime, generateCoverPlaceholder, debounce } from './js/utils.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const playlistId = params.get('id');
+        const contentDiv = document.getElementById('playlist-content');
+        const errorDiv = document.getElementById('error-message');
+
+        let currentPlaylist = null;
+        let isOwner = false;
+        let isCollaborator = false;
+        let editing = false;
+
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (isAuthenticated()) {
+                const user = await getCurrentUser();
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'flex';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                    return user;
+                } else {
+                    localStorage.removeItem('access_token');
+                    loginBtn.style.display = 'inline-flex';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'inline-flex';
+                avatar.style.display = 'none';
+            }
+            return null;
+        }
+
+        async function loadPlaylist() {
+            if (!playlistId) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Не указан ID плейлиста';
+                return;
+            }
+            try {
+                const playlist = await api.get(`/playlists/${playlistId}`);
+                currentPlaylist = playlist;
+                const user = isAuthenticated() ? await getCurrentUser() : null;
+                if (user) {
+                    if (playlist.owner && user.id === playlist.owner.id) {
+                        isOwner = true;
+                        isCollaborator = true;
+                    } else if (playlist.collaborators && playlist.collaborators.some(c => c.id === user.id)) {
+                        isCollaborator = true;
+                    }
+                }
+                let isLiked = false;
+                if (isAuthenticated()) {
+                    try {
+                        const data = await api.get('/users/me/favorites/playlist-ids');
+                        if (data && data.playlist_ids) {
+                            isLiked = data.playlist_ids.some(id => id === playlistId);
+                        }
+                    } catch (e) {}
+                }
+                renderPlaylist(playlist, isLiked);
+            } catch (e) {
+                console.error(e);
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Плейлист не найден';
+            }
+        }
+
+        function renderPlaylist(playlist, isLiked = false) {
+            const coverSrc = generateCoverPlaceholder(`${playlist.name}${playlist.id}`, 250);
+            const ownerName = playlist.owner?.username || 'Неизвестный';
+            const tracks = playlist.tracks || [];
+            const totalDuration = tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
+            const likeBtnText = isLiked ? '❤️ Убрать лайк' : '❤️ Нравится';
+            const isPublicText = playlist.is_public ? 'Публичный' : 'Приватный';
+
+            let html = `
+                <div class="playlist-header">
+                    <img class="playlist-cover" src="${coverSrc}" alt="${playlist.name}">
+                    <div class="playlist-info">
+                        <div class="playlist-type">${isPublicText} плейлист</div>
+                        <h1 class="playlist-name" id="playlist-name-display">${playlist.name}</h1>
+                        <div class="playlist-owner">${ownerName}</div>
+                        <div class="playlist-meta">
+                            <span>⏱ ${formatTime(totalDuration)}</span>
+                            <span>🎵 <span id="track-count">${tracks.length}</span> треков</span>
+                            <span id="playlist-likes">❤️ ${playlist.likes}</span>
+                        </div>
+                        <div class="playlist-actions">
+                            <button class="btn btn-accent" id="play-all-btn">▶ Воспроизвести всё</button>
+                            <button class="btn" id="like-playlist-btn">${likeBtnText}</button>
+                            <button class="btn" id="wave-playlist-btn">🌊 Волна плейлиста</button>
+                            ${isCollaborator ? '<button class="btn" id="edit-toggle-btn">✎ Редактировать</button>' : ''}
+                        </div>
+                        ${isCollaborator ? `
+                        <div class="edit-controls" id="edit-controls" style="display: none;">
+                            ${isOwner ? `
+                            <div class="rename-form">
+                                <input type="text" id="rename-input" placeholder="Новое название" value="${playlist.name}">
+                                <button class="btn" id="rename-btn">Переименовать</button>
+                            </div>
+                            <div class="privacy-form">
+                                <button class="btn" id="toggle-privacy-btn">Сделать ${playlist.is_public ? 'приватным' : 'публичным'}</button>
+                            </div>
+                            <div class="collaborators-section">
+                                <strong style="color: var(--text-secondary);">Коллабораторы</strong>
+                                <div class="collab-list" id="collab-list">
+                                    ${playlist.collaborators?.map(c => 
+                                        `<span class="collab-tag">${c.username} <button data-user-id="${c.id}" class="remove-collab-btn">✕</button></span>`
+                                    ).join('') || ''}
+                                </div>
+                                <div class="collab-search" style="display: flex; gap: 8px;">
+                                    <input type="text" id="collab-search-input" placeholder="Имя пользователя...">
+                                    <button class="btn" id="add-collab-btn">Добавить</button>
+                                    <div class="collab-dropdown" id="collab-dropdown" style="display: none;"></div>
+                                </div>
+                            </div>
+                            ` : ''}
+                            <div class="add-track-form" style="display: flex; gap: 8px; margin-top: 12px;">
+                                <div class="search-track-wrapper">
+                                    <input type="text" id="search-track-input" placeholder="Поиск трека по названию...">
+                                    <div class="search-track-dropdown" id="track-search-dropdown" style="display: none;"></div>
+                                </div>
+                                <button class="btn btn-accent" id="add-selected-track-btn">Добавить</button>
+                            </div>
+                            ${isOwner ? '<button class="btn delete-playlist-btn" id="delete-playlist-btn">🗑 Удалить плейлист</button>' : ''}
+                        </div>` : ''}
+                    </div>
+                </div>
+            `;
+
+            if (tracks.length) {
+                html += '<h2 class="section-title">Треки</h2><div class="tracks-list" id="tracks-container">';
+                tracks.forEach((track, idx) => {
+                    const duration = formatTime(track.duration);
+                    html += `
+                        <div class="track-item" draggable="${isCollaborator}" data-id="${track.id}" data-idx="${idx}">
+                            <div class="track-index">${idx + 1}</div>
+                            <div class="track-info">
+                                <div class="track-name">${track.name}</div>
+                                <div class="track-artists"></div>
+                            </div>
+                            <div class="track-duration">${duration}</div>
+                            <button class="track-play-btn" title="Воспроизвести">▶</button>
+                            ${isCollaborator ? '<button class="track-remove-btn" title="Удалить">✕</button>' : ''}
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="empty-message" id="empty-placeholder">В этом плейлисте пока нет треков</div>';
+            }
+
+            html += `
+                <div id="wave-section" class="wave-results" style="display: none;">
+                    <h2 class="section-title">🌊 Волна плейлиста</h2>
+                    <div class="wave-list" id="wave-list"></div>
+                    <div id="wave-loading" class="empty-message" style="display: none;">Поиск совпадений…</div>
+                    <div id="wave-error" class="empty-message" style="display: none;">Не удалось загрузить рекомендации</div>
+                </div>
+            `;
+
+            contentDiv.innerHTML = html;
+            attachPlaylistEvents(playlist);
+        }
+
+        function attachPlaylistEvents(playlist) {
+            const playAllBtn = document.getElementById('play-all-btn');
+            if (playAllBtn && playlist.tracks.length) {
+                playAllBtn.addEventListener('click', () => player.loadTrack(playlist.tracks[0].id));
+            }
+
+            document.querySelectorAll('.track-item').forEach(item => {
+                const playBtn = item.querySelector('.track-play-btn');
+                const trackId = item.dataset.id;
+                item.addEventListener('click', (e) => {
+                    if (e.target === playBtn || playBtn.contains(e.target)) return;
+                    window.location.href = `/frontend/track.html?id=${trackId}`;
+                });
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    player.loadTrack(trackId);
+                });
+            });
+
+            const likeBtn = document.getElementById('like-playlist-btn');
+            if (likeBtn) {
+                likeBtn.addEventListener('click', async () => {
+                    const likesSpan = document.getElementById('playlist-likes');
+                    try {
+                        await api.post(`/playlists/${playlist.id}/like`);
+                        likeBtn.textContent = '❤️ Убрать лайк';
+                        likesSpan.textContent = `❤️ ${playlist.likes + 1}`;
+                    } catch (e) {
+                        if (e.message.includes('already')) {
+                            await api.delete(`/playlists/${playlist.id}/like`);
+                            likeBtn.textContent = '❤️ Нравится';
+                            likesSpan.textContent = `❤️ ${Math.max(0, playlist.likes - 1)}`;
+                        }
+                    }
+                });
+            }
+
+            const waveBtn = document.getElementById('wave-playlist-btn');
+            if (waveBtn) waveBtn.addEventListener('click', () => loadWave(playlist.id));
+
+            if (!isCollaborator) return;
+
+            const editToggleBtn = document.getElementById('edit-toggle-btn');
+            const editControls = document.getElementById('edit-controls');
+            const removeButtons = document.querySelectorAll('.track-remove-btn');
+            const tracksContainer = document.getElementById('tracks-container');
+
+            editToggleBtn.addEventListener('click', () => {
+                editing = !editing;
+                editControls.style.display = editing ? 'block' : 'none';
+                removeButtons.forEach(btn => btn.style.display = editing ? 'inline-block' : 'none');
+                editToggleBtn.textContent = editing ? '✓ Готово' : '✎ Редактировать';
+                document.querySelectorAll('.track-item').forEach(item => item.draggable = editing);
+            });
+
+            if (isOwner) {
+                document.getElementById('rename-btn').addEventListener('click', async () => {
+                    const newName = document.getElementById('rename-input').value.trim();
+                    if (!newName) return alert('Введите название');
+                    await api.patch(`/playlists/${playlist.id}`, { name: newName });
+                    document.getElementById('playlist-name-display').textContent = newName;
+                });
+
+                document.getElementById('toggle-privacy-btn').addEventListener('click', async () => {
+                    const newPublic = !playlist.is_public;
+                    await api.patch(`/playlists/${playlist.id}`, { is_public: newPublic });
+                    playlist.is_public = newPublic;
+                    document.getElementById('toggle-privacy-btn').textContent = `Сделать ${newPublic ? 'приватным' : 'публичным'}`;
+                });
+
+                const collabSearchInput = document.getElementById('collab-search-input');
+                const collabDropdown = document.getElementById('collab-dropdown');
+                let selectedUserId = null;
+
+                const searchUsers = debounce(async (query) => {
+                    if (!query) { collabDropdown.style.display = 'none'; return; }
+                    try {
+                        const users = await api.get(`/users?q=${encodeURIComponent(query)}`);
+                        if (!users.length) {
+                            collabDropdown.innerHTML = '<div class="dropdown-item" style="cursor: default;">Не найдено</div>';
+                        } else {
+                            collabDropdown.innerHTML = users.slice(0, 5).map(u =>
+                                `<div class="dropdown-item" data-user-id="${u.id}">${u.username}</div>`
+                            ).join('');
+                        }
+                        collabDropdown.style.display = 'block';
+                    } catch (e) { console.error(e); }
+                }, 300);
+
+                collabSearchInput.addEventListener('input', () => searchUsers(collabSearchInput.value.trim()));
+                document.addEventListener('click', (e) => {
+                    if (!collabSearchInput.contains(e.target) && !collabDropdown.contains(e.target)) {
+                        collabDropdown.style.display = 'none';
+                    }
+                });
+
+                collabDropdown.addEventListener('click', (e) => {
+                    const item = e.target.closest('.dropdown-item');
+                    if (!item) return;
+                    selectedUserId = item.dataset.userId;
+                    collabSearchInput.value = item.textContent;
+                    collabDropdown.style.display = 'none';
+                });
+
+                document.getElementById('add-collab-btn').addEventListener('click', async () => {
+                    if (!selectedUserId) return alert('Выберите пользователя');
+                    await api.post(`/playlists/${playlist.id}/collaborators`, { user_id: selectedUserId });
+                    window.location.reload();
+                });
+
+                document.getElementById('collab-list').addEventListener('click', async (e) => {
+                    const removeBtn = e.target.closest('.remove-collab-btn');
+                    if (!removeBtn) return;
+                    const userId = removeBtn.dataset.userId;
+                    await api.delete(`/playlists/${playlist.id}/collaborators/${userId}`);
+                    window.location.reload();
+                });
+
+                document.getElementById('delete-playlist-btn').addEventListener('click', async () => {
+                    if (confirm('Удалить плейлист навсегда?')) {
+                        await api.delete(`/playlists/${playlist.id}`);
+                        window.location.href = '/frontend/index.html';
+                    }
+                });
+            }
+
+            const searchTrackInput = document.getElementById('search-track-input');
+            const trackDropdown = document.getElementById('track-search-dropdown');
+            let selectedTrackId = null;
+
+            const performTrackSearch = debounce(async (query) => {
+                if (!query) { trackDropdown.style.display = 'none'; return; }
+                try {
+                    const tracks = await api.get(`/tracks?q=${encodeURIComponent(query)}`);
+                    if (!tracks.length) {
+                        trackDropdown.innerHTML = '<div class="dropdown-item" style="cursor: default;">Ничего не найдено</div>';
+                    } else {
+                        trackDropdown.innerHTML = tracks.slice(0, 5).map(t =>
+                            `<div class="dropdown-item" data-track-id="${t.id}">${t.name} — ${t.artists?.map(a => a.name).join(', ')}</div>`
+                        ).join('');
+                    }
+                    trackDropdown.style.display = 'block';
+                } catch (e) { console.error(e); }
+            }, 300);
+
+            searchTrackInput.addEventListener('input', () => performTrackSearch(searchTrackInput.value.trim()));
+            document.addEventListener('click', (e) => {
+                if (!searchTrackInput.contains(e.target) && !trackDropdown.contains(e.target)) {
+                    trackDropdown.style.display = 'none';
+                }
+            });
+
+            trackDropdown.addEventListener('click', (e) => {
+                const item = e.target.closest('.dropdown-item');
+                if (!item) return;
+                selectedTrackId = item.dataset.trackId;
+                searchTrackInput.value = item.textContent.split(' — ')[0];
+                trackDropdown.style.display = 'none';
+            });
+
+            document.getElementById('add-selected-track-btn').addEventListener('click', async () => {
+                if (!selectedTrackId) return alert('Выберите трек');
+                await api.post(`/playlists/${playlist.id}/tracks`, { track_id: selectedTrackId });
+                window.location.reload();
+            });
+
+            document.addEventListener('click', async (e) => {
+                if (!editing) return;
+                const removeBtn = e.target.closest('.track-remove-btn');
+                if (!removeBtn) return;
+                e.stopPropagation();
+                const trackItem = removeBtn.closest('.track-item');
+                await api.delete(`/playlists/${playlist.id}/tracks/${trackItem.dataset.id}`);
+                trackItem.remove();
+                const remaining = document.querySelectorAll('.track-item');
+                document.getElementById('track-count').textContent = remaining.length;
+                remaining.forEach((item, idx) => {
+                    item.querySelector('.track-index').textContent = idx + 1;
+                    item.dataset.idx = idx;
+                });
+                if (!remaining.length) {
+                    const container = document.getElementById('tracks-container');
+                    if (container) container.innerHTML = '<div class="empty-message">В этом плейлисте пока нет треков</div>';
+                }
+            });
+
+            if (tracksContainer) {
+                tracksContainer.addEventListener('dragstart', (e) => {
+                    const item = e.target.closest('.track-item');
+                    if (!editing || !item) return;
+                    e.dataTransfer.setData('text/plain', item.dataset.id);
+                    setTimeout(() => item.classList.add('dragging'), 0);
+                });
+                tracksContainer.addEventListener('dragend', (e) => {
+                    const item = e.target.closest('.track-item');
+                    if (item) item.classList.remove('dragging');
+                });
+                tracksContainer.addEventListener('dragover', e => e.preventDefault());
+                tracksContainer.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    if (!editing) return;
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    const target = e.target.closest('.track-item');
+                    if (!target || draggedId === target.dataset.id) return;
+                    const items = [...tracksContainer.querySelectorAll('.track-item')];
+                    const draggedItem = items.find(i => i.dataset.id === draggedId);
+                    const targetItem = items.find(i => i.dataset.id === target.dataset.id);
+                    if (!draggedItem || !targetItem) return;
+                    const draggedIdx = items.indexOf(draggedItem);
+                    const targetIdx = items.indexOf(targetItem);
+                    if (draggedIdx < targetIdx) {
+                        tracksContainer.insertBefore(draggedItem, targetItem.nextSibling);
+                    } else {
+                        tracksContainer.insertBefore(draggedItem, targetItem);
+                    }
+                    const newItems = [...tracksContainer.querySelectorAll('.track-item')];
+                    newItems.forEach((item, idx) => {
+                        item.querySelector('.track-index').textContent = idx + 1;
+                        item.dataset.idx = idx;
+                    });
+                    const newOrder = newItems.map(item => item.dataset.id);
+                    await api.post(`/playlists/${playlist.id}/tracks/reorder`, newOrder);
+                });
+            }
+        }
+
+        async function loadWave(playlistId) {
+            const waveSection = document.getElementById('wave-section');
+            const waveList = document.getElementById('wave-list');
+            const waveLoading = document.getElementById('wave-loading');
+            const waveError = document.getElementById('wave-error');
+
+            waveSection.style.display = 'block';
+            waveList.innerHTML = '';
+            waveLoading.style.display = 'block';
+            waveError.style.display = 'none';
+
+            try {
+                const similar = await api.post(`/playlists/${playlistId}/wave`, { limit: 20 });
+                waveLoading.style.display = 'none';
+                if (!similar.length) {
+                    waveList.innerHTML = '<div class="empty-message">Совпадений не найдено</div>';
+                    return;
+                }
+                waveList.innerHTML = similar.map(t => {
+                    const artistsStr = (t.artists || []).map(a => a.name).join(', ');
+                    const uv = t.similarity ? Math.round(t.similarity) : '—';
+                    return `
+                        <div class="wave-item" data-id="${t.id}">
+                            <div class="wave-index">UV ${uv}</div>
+                            <div class="wave-info">
+                                <div class="wave-track-name">${t.name}</div>
+                                <div class="wave-track-artists">${artistsStr}</div>
+                            </div>
+                            <button class="wave-play-btn" title="Воспроизвести">▶</button>
+                        </div>
+                    `;
+                }).join('');
+
+                document.querySelectorAll('.wave-item').forEach(item => {
+                    const playBtn = item.querySelector('.wave-play-btn');
+                    const trackId = item.dataset.id;
+                    item.addEventListener('click', (e) => {
+                        if (e.target === playBtn || playBtn.contains(e.target)) return;
+                        window.location.href = `/frontend/track.html?id=${trackId}`;
+                    });
+                    playBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        player.loadTrack(trackId);
+                    });
+                });
+            } catch (e) {
+                console.error(e);
+                waveLoading.style.display = 'none';
+                waveError.style.display = 'block';
+            }
+        }
+
+        updateHeader();
+        loadPlaylist();
+    </script>
+</body>
+</html>
 ```
 
 frontend/profile.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Профиль</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        .profile-page {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        .profile-header {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 48px;
+            align-items: center;
+        }
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: var(--accent);
+        }
+        .profile-info {
+            flex: 1;
+        }
+        .profile-username {
+            font-size: 32px;
+            font-weight: 600;
+        }
+        .profile-stats {
+            display: flex;
+            gap: 24px;
+            color: var(--text-secondary);
+            margin: 12px 0;
+        }
+        .tabs {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+            border-bottom: 1px solid var(--bg-card);
+            padding-bottom: 8px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 18px;
+            font-weight: 500;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: var(--radius-md);
+            transition: var(--transition);
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            background: rgba(138, 92, 255, 0.1);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .entity-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .entity-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            width: 200px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .entity-card:hover {
+            background: var(--bg-card-hover);
+            transform: scale(1.02);
+        }
+        .entity-card img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-deep));
+            margin-bottom: 8px;
+        }
+        .entity-card .card-title {
+            font-size: 16px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .entity-card .card-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .privacy-form {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            max-width: 400px;
+        }
+        .privacy-form h3 {
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+        .privacy-form label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+        }
+        .privacy-form button {
+            margin-top: 16px;
+        }
+        .empty-message {
+            color: var(--text-secondary);
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">U<span style="color: var(--accent);">:</span>V</a>
+        <div class="header-actions">
+            <button class="btn" id="logout-btn" style="display: none;">Выйти</button>
+        </div>
+    </header>
 
+    <main class="profile-page">
+        <div id="profile-content"></div>
+    </main>
+
+    <!-- Глобальный плеер -->
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
+    <script>
+        (function createPlayerDOM() {
+            const bar = document.getElementById('player-bar');
+            bar.innerHTML = `<img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover"><div class="player-info"><div id="player-track-name" class="player-track-link">Не выбран трек</div><div id="player-artist-name" class="player-artist-name"></div></div><div class="player-controls"><button id="player-play" class="player-btn">▶</button><button id="player-next" class="player-btn">⏭</button></div><div class="player-progress-container"><span id="player-current-time" class="player-time">0:00</span><input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0"><span id="player-duration" class="player-time">0:00</span></div><div class="player-actions"><button id="player-like" class="player-btn">❤️</button><button id="player-wave" class="player-btn">🌊</button><button id="player-expand" class="player-btn">⤢</button></div>`;
+        })();
+    </script>
+    <style>
+        .player-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 180px; background: var(--bg-card); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 20px 32px; display: flex; align-items: center; gap: 24px; z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; align-items: center; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress { flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px; -webkit-appearance: none; appearance: none; }
+        .player-progress::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; transition: var(--transition); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .player-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
+        .player-btn.liked { color: var(--accent); }
+    </style>
+
+    <script type="module">
+        import { isAuthenticated, getCurrentUser, logout, requireAuth } from './js/auth.js';
+        import { api } from './js/api.js';
+        import { player } from './js/player.js';
+        import { generateCoverPlaceholder } from './js/utils.js';
+
+        requireAuth();
+
+        const contentDiv = document.getElementById('profile-content');
+        let currentUser = null;
+
+        async function loadStats() {
+            try {
+                const [trackIds, playlistIds, artistIds, albumIds] = await Promise.all([
+                    api.get('/users/me/favorites/ids').then(r => r.track_ids || []),
+                    api.get('/users/me/favorites/playlist-ids').then(r => r.playlist_ids || []),
+                    api.get('/users/me/favorites/artist-ids').then(r => r.artist_ids || []),
+                    api.get('/users/me/favorites/album-ids').then(r => r.album_ids || []),
+                ]);
+                document.getElementById('fav-counts').textContent = 
+                    `❤️ ${trackIds.length} треков · ${playlistIds.length} плейлистов · ${artistIds.length} артистов · ${albumIds.length} альбомов`;
+            } catch (e) {
+                document.getElementById('fav-counts').textContent = '';
+            }
+        }
+
+        async function init() {
+            try {
+                currentUser = await getCurrentUser();
+                if (!currentUser) {
+                    logout();
+                    return;
+                }
+                renderProfile();
+                document.getElementById('logout-btn').style.display = 'inline-flex';
+                document.getElementById('logout-btn').addEventListener('click', () => logout());
+            } catch (e) {
+                console.error(e);
+                logout();
+            }
+        }
+
+        function renderProfile() {
+            const html = `
+                <div class="profile-header">
+                    <div class="profile-avatar">${currentUser.username.charAt(0).toUpperCase()}</div>
+                    <div class="profile-info">
+                        <h1 class="profile-username">${currentUser.username}</h1>
+                        <div class="profile-stats">
+                            <span id="fav-counts">Загрузка...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="tabs" id="tabs">
+                    <button class="tab-btn active" data-tab="tracks">Треки</button>
+                    <button class="tab-btn" data-tab="playlists">Плейлисты</button>
+                    <button class="tab-btn" data-tab="artists">Артисты</button>
+                    <button class="tab-btn" data-tab="albums">Альбомы</button>
+                    <button class="tab-btn" data-tab="settings">Настройки</button>
+                </div>
+                <div id="tab-content-container"></div>
+            `;
+            contentDiv.innerHTML = html;
+            setupTabs();
+            loadStats();
+            loadTabContent('tracks');
+        }
+
+        function setupTabs() {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const tab = btn.dataset.tab;
+                    loadTabContent(tab);
+                });
+            });
+        }
+
+        async function loadTabContent(tab) {
+            const container = document.getElementById('tab-content-container');
+            container.innerHTML = '<div class="empty-message">Загрузка...</div>';
+            try {
+                switch (tab) {
+                    case 'tracks':
+                        const tracks = await api.get('/users/me/favorites/tracks');
+                        renderEntityCards(tracks, 'track', 'tracks');
+                        break;
+                    case 'playlists':
+                        const playlists = await api.get('/users/me/favorites/playlists');
+                        renderEntityCards(playlists, 'playlist', 'playlists');
+                        break;
+                    case 'artists':
+                        const artists = await api.get('/users/me/favorites/artists');
+                        renderEntityCards(artists, 'artist', 'artists');
+                        break;
+                    case 'albums':
+                        const albums = await api.get('/users/me/favorites/albums');
+                        renderEntityCards(albums, 'album', 'albums');
+                        break;
+                    case 'settings':
+                        renderSettings();
+                        break;
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="empty-message">Ошибка загрузки</div>';
+            }
+        }
+
+        function renderEntityCards(items, type, entityPlural) {
+            const container = document.getElementById('tab-content-container');
+            if (!items.length) {
+                container.innerHTML = `<div class="empty-message">Нет избранных ${entityPlural}</div>`;
+                return;
+            }
+            let html = '<div class="entity-list">';
+            items.forEach(item => {
+                const cover = generateCoverPlaceholder(`${item.name}${item.id}`, 200);
+                let subtitle = '';
+                if (type === 'track' && item.artists) subtitle = item.artists.map(a => a.name).join(', ');
+                else if (type === 'playlist') subtitle = item.owner?.username || '';
+                else if (type === 'album' && item.artists) subtitle = item.artists.map(a => a.name).join(', ');
+                html += `
+                    <div class="entity-card" data-type="${type}" data-id="${item.id}">
+                        <img src="${cover}" alt="${item.name}">
+                        <div class="card-title">${item.name}</div>
+                        <div class="card-subtitle">${subtitle}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+
+            document.querySelectorAll('.entity-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const type = card.dataset.type;
+                    const id = card.dataset.id;
+                    if (type === 'track') window.location.href = `/frontend/track.html?id=${id}`;
+                    else if (type === 'playlist') window.location.href = `/frontend/playlist.html?id=${id}`;
+                    else if (type === 'artist') window.location.href = `/frontend/artist.html?id=${id}`;
+                    else if (type === 'album') window.location.href = `/frontend/album.html?id=${id}`;
+                });
+            });
+        }
+
+        async function renderSettings() {
+            const container = document.getElementById('tab-content-container');
+            const profile = currentUser;
+            const html = `
+                <div class="privacy-form">
+                    <h3>Приватность избранного</h3>
+                    <label>
+                        Треки
+                        <input type="checkbox" id="priv-tracks" ${profile.is_fav_tracks_public ? 'checked' : ''}>
+                    </label>
+                    <label>
+                        Плейлисты
+                        <input type="checkbox" id="priv-playlists" ${profile.is_fav_playlists_public ? 'checked' : ''}>
+                    </label>
+                    <label>
+                        Артисты
+                        <input type="checkbox" id="priv-artists" ${profile.is_fav_artists_public ? 'checked' : ''}>
+                    </label>
+                    <label>
+                        Альбомы
+                        <input type="checkbox" id="priv-albums" ${profile.is_fav_albums_public ? 'checked' : ''}>
+                    </label>
+                    <button class="btn btn-accent" id="save-privacy-btn">Сохранить</button>
+                </div>
+            `;
+            container.innerHTML = html;
+            document.getElementById('save-privacy-btn').addEventListener('click', async () => {
+                const data = {
+                    is_fav_tracks_public: document.getElementById('priv-tracks').checked,
+                    is_fav_playlists_public: document.getElementById('priv-playlists').checked,
+                    is_fav_artists_public: document.getElementById('priv-artists').checked,
+                    is_fav_albums_public: document.getElementById('priv-albums').checked,
+                };
+                try {
+                    await api.patch('/users/me/profile', data);
+                    alert('Настройки сохранены');
+                } catch (e) {
+                    alert('Ошибка: ' + e.message);
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
 ```
 
 frontend/register.html ```
@@ -5019,7 +6990,354 @@ frontend/register.html ```
 ```
 
 frontend/search.html ```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U:V · Поиск</title>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/components.css">
+    <style>
+        .search-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        .search-header {
+            margin-bottom: 32px;
+        }
+        .search-query {
+            font-size: 28px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+        .search-query span {
+            color: var(--accent);
+        }
+        /* Стили для повторного поиска */
+        .search-again {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto 32px auto;
+            background: var(--bg-card);
+            border-radius: 30px;
+            padding: 0 20px;
+        }
+        .search-again .input {
+            background: transparent;
+            border: none;
+            padding-left: 12px;
+            font-size: 16px;
+            color: var(--text-primary);
+            outline: none;
+            width: 100%;
+        }
+        .search-again .input::placeholder {
+            color: var(--text-secondary);
+        }
+        .search-again .search-icon {
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .search-again .search-icon:hover {
+            color: var(--accent);
+        }
+        .results-section {
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 22px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        .result-list {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 8px 0;
+        }
+        .result-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            transition: background 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+        .result-item:hover {
+            background: rgba(138, 92, 255, 0.08);
+        }
+        .result-icon {
+            font-size: 24px;
+            margin-right: 16px;
+            width: 32px;
+            text-align: center;
+        }
+        .result-info {
+            flex: 1;
+        }
+        .result-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .result-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .result-extra {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-left: 16px;
+        }
+        .empty-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #ff5c5c;
+        }
+    </style>
+</head>
+<body>
+    <!-- Хедер -->
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
+            U<span style="color: var(--accent);">:</span>V
+        </a>
+        <div class="header-actions">
+            <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+        </div>
+    </header>
 
+    <main class="search-page">
+        <div class="search-header">
+            <h1 class="search-query">Поиск: <span id="query-text"></span></h1>
+            <!-- Новая строка поиска -->
+            <div class="search-again">
+                <span class="search-icon" id="search-again-icon">🔍</span>
+                <input type="text" class="input" placeholder="Искать снова..." id="search-again-input">
+            </div>
+        </div>
+        <div id="results-container"></div>
+        <div id="error-message" class="error-message" style="display: none;"></div>
+    </main>
+
+    <!-- Глобальный плеер -->
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
+
+    <!-- Инициализация структуры плеера -->
+    <script>
+        (function createPlayerDOM() {
+            const bar = document.getElementById('player-bar');
+            bar.innerHTML = `
+                <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
+                <div class="player-info">
+                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
+                    <div id="player-artist-name" class="player-artist-name"></div>
+                </div>
+                <div class="player-controls">
+                    <button id="player-play" class="player-btn">▶</button>
+                    <button id="player-next" class="player-btn">⏭</button>
+                </div>
+                <div class="player-progress-container">
+                    <span id="player-current-time" class="player-time">0:00</span>
+                    <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
+                    <span id="player-duration" class="player-time">0:00</span>
+                </div>
+                <div class="player-actions">
+                    <button id="player-like" class="player-btn">❤️</button>
+                    <button id="player-wave" class="player-btn">🌊</button>
+                    <button id="player-expand" class="player-btn">⤢</button>
+                </div>
+            `;
+        })();
+    </script>
+
+    <style>
+        .player-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%; height: 180px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            padding: 20px 32px; display: flex; align-items: center; gap: 24px;
+            z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; align-items: center; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress {
+            flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px;
+            -webkit-appearance: none; appearance: none;
+        }
+        .player-progress::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+        }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn {
+            background: none; border: none; color: var(--text-secondary); font-size: 24px;
+            cursor: pointer; transition: var(--transition); width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
+        .player-btn.liked { color: var(--accent); }
+    </style>
+
+    <script type="module">
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';
+        import { api } from './js/api.js';
+        import { formatTime } from './js/utils.js';
+        import { player } from './js/player.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const query = params.get('q')?.trim() || '';
+        document.getElementById('query-text').textContent = query || '(пустой запрос)';
+        const container = document.getElementById('results-container');
+        const errorEl = document.getElementById('error-message');
+
+        // Обработка повторного поиска
+        const searchAgainInput = document.getElementById('search-again-input');
+        const searchAgainIcon = document.getElementById('search-again-icon');
+
+        function doSearch(newQuery) {
+            if (!newQuery.trim()) return;
+            window.location.href = `/frontend/search.html?q=${encodeURIComponent(newQuery.trim())}`;
+        }
+
+        searchAgainInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                doSearch(e.target.value);
+            }
+        });
+        searchAgainIcon.addEventListener('click', () => {
+            doSearch(searchAgainInput.value);
+        });
+
+        // Хедер
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (isAuthenticated()) {
+                const user = await getCurrentUser();
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'flex';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                } else {
+                    localStorage.removeItem('access_token');
+                    loginBtn.style.display = 'inline-flex';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'inline-flex';
+                avatar.style.display = 'none';
+            }
+        }
+
+        async function performSearch() {
+            if (!query) {
+                container.innerHTML = '<div class="empty-results">Введите поисковый запрос</div>';
+                return;
+            }
+            try {
+                const [tracks, albums, artists] = await Promise.all([
+                    api.get(`/tracks?q=${encodeURIComponent(query)}`),
+                    api.get(`/albums?q=${encodeURIComponent(query)}`),
+                    api.get(`/artists?q=${encodeURIComponent(query)}`)
+                ]);
+                renderResults(tracks, albums, artists);
+            } catch (e) {
+                console.error(e);
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Ошибка загрузки результатов поиска';
+            }
+        }
+
+        function renderResults(tracks, albums, artists) {
+            let html = '';
+
+            // Треки
+            if (tracks.length) {
+                html += '<div class="results-section"><h2 class="section-title">Треки</h2><div class="result-list">';
+                tracks.forEach(t => {
+                    const artistsStr = t.artists?.map(a => a.name).join(', ') || 'Неизвестный исполнитель';
+                    const duration = t.duration ? formatTime(t.duration) : '—';
+                    html += `
+                        <a href="/frontend/track.html?id=${t.id}" class="result-item">
+                            <div class="result-icon">🎵</div>
+                            <div class="result-info">
+                                <div class="result-name">${t.name}</div>
+                                <div class="result-subtitle">${artistsStr}</div>
+                            </div>
+                            <div class="result-extra">${duration}</div>
+                        </a>`;
+                });
+                html += '</div></div>';
+            }
+
+            // Альбомы
+            if (albums.length) {
+                html += '<div class="results-section"><h2 class="section-title">Альбомы</h2><div class="result-list">';
+                albums.forEach(a => {
+                    const artistsStr = a.artists?.map(ar => ar.name).join(', ') || 'Разные исполнители';
+                    html += `
+                        <a href="/frontend/album.html?id=${a.id}" class="result-item">
+                            <div class="result-icon">💿</div>
+                            <div class="result-info">
+                                <div class="result-name">${a.name}</div>
+                                <div class="result-subtitle">${artistsStr}</div>
+                            </div>
+                            <div class="result-extra">${a.release_date || ''}</div>
+                        </a>`;
+                });
+                html += '</div></div>';
+            }
+
+            // Артисты
+            if (artists.length) {
+                html += '<div class="results-section"><h2 class="section-title">Артисты</h2><div class="result-list">';
+                artists.forEach(ar => {
+                    html += `
+                        <a href="/frontend/artist.html?id=${ar.id}" class="result-item">
+                            <div class="result-icon">🎤</div>
+                            <div class="result-info">
+                                <div class="result-name">${ar.name}</div>
+                            </div>
+                        </a>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (!html) {
+                container.innerHTML = '<div class="empty-results">Ничего не найдено по запросу «' + query + '»</div>';
+            } else {
+                container.innerHTML = html;
+            }
+        }
+
+        updateHeader();
+        performSearch();
+    </script>
+</body>
+</html>
 ```
 
 frontend/track.html ```
@@ -5033,7 +7351,7 @@ frontend/track.html ```
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/components.css">
     <style>
-        /* Дополнительные стили для страницы трека */
+        /* Стили без изменений */
         .track-page {
             max-width: 800px;
             margin: 0 auto;
@@ -5201,19 +7519,17 @@ frontend/track.html ```
         </section>
     </main>
 
-    <!-- Глобальный плеер (вставляется через player.js) -->
-    <div id="player-bar" class="player-bar" style="display: none;">
-        <!-- динамически создаётся в index.html, но для других страниц нужно продублировать структуру или вынести в отдельный скрипт -->
-    </div>
+    <!-- Глобальный плеер -->
+    <div id="player-bar" class="player-bar" style="display: none;"></div>
 
-    <!-- Скрипт инициализации структуры плеера (как в index.html) -->
+    <!-- Скрипт инициализации структуры плеера -->
     <script>
         (function createPlayerDOM() {
             const bar = document.getElementById('player-bar');
             bar.innerHTML = `
                 <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
                 <div class="player-info">
-                    <div id="player-track-name" class="player-track-name">Не выбран трек</div>
+                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
                     <div id="player-artist-name" class="player-artist-name"></div>
                 </div>
                 <div class="player-controls">
@@ -5234,8 +7550,8 @@ frontend/track.html ```
         })();
     </script>
 
+    <!-- Стили плеера -->
     <style>
-        /* Стили плеера (скопированы из index.html, чтобы страница работала автономно) */
         .player-bar {
             position: fixed;
             bottom: 0;
@@ -5282,7 +7598,6 @@ frontend/track.html ```
         import { api } from './js/api.js';
         import { formatTime, generateCoverPlaceholder } from './js/utils.js';
 
-        // --- Получение ID трека из URL ---
         const params = new URLSearchParams(window.location.search);
         const trackId = params.get('id');
         const contentDiv = document.getElementById('track-content');
@@ -5292,7 +7607,7 @@ frontend/track.html ```
         const similarLoading = document.getElementById('similar-loading');
         const similarError = document.getElementById('similar-error');
 
-        // --- Проверка авторизации для хедера ---
+        // --- Хедер ---
         async function updateHeader() {
             const loginBtn = document.getElementById('login-btn');
             const avatar = document.getElementById('user-avatar');
@@ -5314,7 +7629,7 @@ frontend/track.html ```
             }
         }
 
-        // --- Загрузка и отображение трека ---
+        // --- Загрузка трека ---
         async function loadTrackDetails() {
             if (!trackId) {
                 errorDiv.style.display = 'block';
@@ -5323,8 +7638,20 @@ frontend/track.html ```
             }
             try {
                 const track = await api.get(`/tracks/${trackId}`);
-                renderTrack(track);
-                // Загружаем похожие треки
+                // Проверяем, лайкнут ли трек текущим пользователем
+                let isLiked = false;
+                if (isAuthenticated()) {
+                    try {
+                        const data = await api.get('/users/me/favorites/ids');
+                        if (data && data.track_ids) {
+                            isLiked = data.track_ids.some(id => id === trackId);
+                        }
+                    } catch (e) {
+                        // если не авторизован или ошибка — остаётся false
+                        console.warn('Не удалось проверить избранное', e);
+                    }
+                }
+                renderTrack(track, isLiked);
                 loadSimilarTracks(trackId);
             } catch (e) {
                 console.error(e);
@@ -5333,10 +7660,11 @@ frontend/track.html ```
             }
         }
 
-        function renderTrack(track) {
+        function renderTrack(track, isLiked = false) {
             const artists = track.artists || [];
             const albums = track.albums || [];
             const coverSrc = generateCoverPlaceholder(`${track.name}${track.id}`, 250);
+            const likeBtnText = isLiked ? '❤️ Убрать лайк' : '❤️ Нравится';
 
             const artistsLinks = artists.map(a => 
                 `<a href="/frontend/artist.html?id=${a.id}">${a.name}</a>`
@@ -5355,12 +7683,12 @@ frontend/track.html ```
                         <div class="track-meta">
                             <span>📅 ${track.release_date}</span>
                             <span>⏱ ${formatTime(track.duration)}</span>
-                            <span>❤️ ${track.likes}</span>
-                            <span>▶ ${track.plays}</span>
+                            <span id="track-likes">❤️ ${track.likes}</span>
+                            <span id="track-plays">▶ ${track.plays}</span>
                         </div>
                         <div class="track-actions">
                             <button class="btn btn-accent" id="play-track-btn">▶ Воспроизвести</button>
-                            <button class="btn" id="like-track-btn">❤️ Нравится</button>
+                            <button class="btn" id="like-track-btn">${likeBtnText}</button>
                             <button class="btn" id="wave-track-btn">🌊 Похожие</button>
                         </div>
                         ${albumsLinks ? `<div class="track-albums"><h3>Альбомы</h3>${albumsLinks}</div>` : ''}
@@ -5369,29 +7697,41 @@ frontend/track.html ```
             `;
             contentDiv.innerHTML = html;
 
-            // Навешиваем обработчики
+            // Обработчики
             document.getElementById('play-track-btn').addEventListener('click', () => {
                 player.loadTrack(track.id);
+                // Увеличиваем счётчик прослушиваний на странице
+                const playsSpan = document.getElementById('track-plays');
+                if (playsSpan) {
+                    const current = parseInt(playsSpan.textContent.match(/\d+/)?.[0] || track.plays);
+                    playsSpan.textContent = `▶ ${current + 1}`;
+                }
             });
+
             document.getElementById('like-track-btn').addEventListener('click', async () => {
                 const likeBtn = document.getElementById('like-track-btn');
+                const likesSpan = document.getElementById('track-likes');
                 try {
                     await api.post(`/tracks/${track.id}/like`);
                     likeBtn.textContent = '❤️ Убрать лайк';
+                    const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || track.likes);
+                    likesSpan.textContent = `❤️ ${current + 1}`;
                 } catch (e) {
                     if (e.message.includes('already')) {
                         await api.delete(`/tracks/${track.id}/like`);
                         likeBtn.textContent = '❤️ Нравится';
+                        const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || track.likes);
+                        likesSpan.textContent = `❤️ ${Math.max(0, current - 1)}`;
                     }
                 }
-                // обновить кол-во лайков (можно перезапросить трек)
             });
+
             document.getElementById('wave-track-btn').addEventListener('click', () => {
                 similarSection.scrollIntoView({ behavior: 'smooth' });
             });
         }
 
-        // --- Загрузка похожих треков ---
+        // --- Похожие треки ---
         async function loadSimilarTracks(id) {
             similarSection.style.display = 'block';
             similarLoading.style.display = 'block';
@@ -5418,16 +7758,13 @@ frontend/track.html ```
                     `;
                 }).join('');
 
-                // Навешиваем обработчики
                 document.querySelectorAll('.similar-item').forEach(item => {
                     const playBtn = item.querySelector('.similar-play-btn');
                     const trackId = item.dataset.id;
-                    // Клик по строке — переход на страницу трека
                     item.addEventListener('click', (e) => {
                         if (e.target === playBtn || playBtn.contains(e.target)) return;
                         window.location.href = `/frontend/track.html?id=${trackId}`;
                     });
-                    // Кнопка Play
                     playBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         player.loadTrack(trackId);
@@ -5444,7 +7781,7 @@ frontend/track.html ```
         updateHeader();
         loadTrackDetails();
 
-        window.player = player; // для отладки
+        window.player = player;
     </script>
 </body>
 </html>

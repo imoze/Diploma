@@ -250,3 +250,134 @@ def get_my_favorite_albums(
     amap = {a.id: a for a in albums}
     ordered = [amap[aid] for aid in album_ids if aid in amap]
     return [build_album_response(a, db) for a in ordered]
+
+# ----- Эндпоинты для просмотра избранного другого пользователя -----
+
+@router.get("/{user_id}/favorites/tracks", response_model=List[TrackResponse])
+def get_user_favorite_tracks(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_tracks_public and (current_user is None or current_user.id != user_id):
+        return []
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == user_id).order_by(FavTracks.idx).all()
+    track_ids = [link.track_id for link in fav_links]
+    tracks = db.query(Track).filter(Track.id.in_(track_ids)).all() if track_ids else []
+    track_map = {t.id: t for t in tracks}
+    ordered = [track_map[tid] for tid in track_ids if tid in track_map]
+    return [build_track_response(t, db) for t in ordered]
+
+@router.get("/{user_id}/favorites/playlists", response_model=List[PlaylistResponse])
+def get_user_favorite_playlists(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_playlists_public and (current_user is None or current_user.id != user_id):
+        return []
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == user_id).order_by(FavPlaylists.idx).all()
+    playlist_ids = [link.playlist_id for link in fav_links]
+    playlists = db.query(Playlist).filter(Playlist.id.in_(playlist_ids)).all() if playlist_ids else []
+    pmap = {p.id: p for p in playlists}
+    ordered = [pmap[pid] for pid in playlist_ids if pid in pmap]
+    return [build_playlist_response(p, db) for p in ordered]
+
+@router.get("/{user_id}/favorites/artists", response_model=List[ArtistBrief])
+def get_user_favorite_artists(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_artists_public and (current_user is None or current_user.id != user_id):
+        return []
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == user_id).order_by(FavArtists.idx).all()
+    artist_ids = [link.artist_id for link in fav_links]
+    artists = db.query(Artist).filter(Artist.id.in_(artist_ids)).all() if artist_ids else []
+    amap = {a.id: a for a in artists}
+    ordered = [amap[aid] for aid in artist_ids if aid in amap]
+    return ordered
+
+@router.get("/{user_id}/favorites/albums", response_model=List[AlbumResponse])
+def get_user_favorite_albums(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_albums_public and (current_user is None or current_user.id != user_id):
+        return []
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == user_id).order_by(FavAlbums.idx).all()
+    album_ids = [link.album_id for link in fav_links]
+    albums = db.query(Album).filter(Album.id.in_(album_ids)).all() if album_ids else []
+    amap = {a.id: a for a in albums}
+    ordered = [amap[aid] for aid in album_ids if aid in amap]
+    return [build_album_response(a, db) for a in ordered]
+
+# ID-эндпоинты для чужого профиля
+@router.get("/{user_id}/favorites/ids", response_model=FavoriteTrackIds)
+def get_user_favorite_track_ids(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_tracks_public and (current_user is None or current_user.id != user_id):
+        return FavoriteTrackIds(track_ids=[])
+    fav_links = db.query(FavTracks).filter(FavTracks.user_id == user_id).all()
+    return FavoriteTrackIds(track_ids=[link.track_id for link in fav_links])
+
+@router.get("/{user_id}/favorites/playlist-ids", response_model=FavoritePlaylistIds)
+def get_user_favorite_playlist_ids(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_playlists_public and (current_user is None or current_user.id != user_id):
+        return FavoritePlaylistIds(playlist_ids=[])
+    fav_links = db.query(FavPlaylists).filter(FavPlaylists.user_id == user_id).all()
+    return FavoritePlaylistIds(playlist_ids=[link.playlist_id for link in fav_links])
+
+@router.get("/{user_id}/favorites/artist-ids", response_model=FavoriteArtistIds)
+def get_user_favorite_artist_ids(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_artists_public and (current_user is None or current_user.id != user_id):
+        return FavoriteArtistIds(artist_ids=[])
+    fav_links = db.query(FavArtists).filter(FavArtists.user_id == user_id).all()
+    return FavoriteArtistIds(artist_ids=[link.artist_id for link in fav_links])
+
+@router.get("/{user_id}/favorites/album-ids", response_model=FavoriteAlbumIds)
+def get_user_favorite_album_ids(
+    user_id: UUID,
+    current_user: Users | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_fav_albums_public and (current_user is None or current_user.id != user_id):
+        return FavoriteAlbumIds(album_ids=[])
+    fav_links = db.query(FavAlbums).filter(FavAlbums.user_id == user_id).all()
+    return FavoriteAlbumIds(album_ids=[link.album_id for link in fav_links])

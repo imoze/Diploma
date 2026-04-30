@@ -163,7 +163,7 @@
                     <div class="playlist-info">
                         <div class="playlist-type">${isPublicText} плейлист</div>
                         <h1 class="playlist-name" id="playlist-name-display">${playlist.name}</h1>
-                        <div class="playlist-owner">${ownerName}</div>
+                        <div class="playlist-owner"><a href="/frontend/profile.html?id=${playlist.owner.id}" style="color: var(--accent); text-decoration: none;">${ownerName}</a></div>
                         <div class="playlist-meta">
                             <span>⏱ ${formatTime(totalDuration)}</span>
                             <span>🎵 <span id="track-count">${tracks.length}</span> треков</span>
@@ -188,9 +188,7 @@
                             <div class="collaborators-section">
                                 <strong style="color: var(--text-secondary);">Коллабораторы</strong>
                                 <div class="collab-list" id="collab-list">
-                                    ${playlist.collaborators?.map(c => 
-                                        `<span class="collab-tag">${c.username} <button data-user-id="${c.id}" class="remove-collab-btn">✕</button></span>`
-                                    ).join('') || ''}
+                                    ${playlist.collaborators?.map(c => `<span class="collab-tag"><a href="/frontend/profile.html?id=${c.id}" style="color: inherit; text-decoration: none;">${c.username}</a> <button data-user-id="${c.id}" class="remove-collab-btn">✕</button></span>`).join('') || ''}
                                 </div>
                                 <div class="collab-search" style="display: flex; gap: 8px;">
                                     <input type="text" id="collab-search-input" placeholder="Имя пользователя...">
