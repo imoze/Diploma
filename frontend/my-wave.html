@@ -78,14 +78,29 @@
         }
         .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
         .player-btn.liked { color: var(--accent); }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--accent);
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <header style="display: flex; justify-content: space-between; padding: 24px 32px;">
-        <a href="/frontend/index.html" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
+    <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
             U<span style="color: var(--accent);">:</span>V
         </a>
-        <a href="/frontend/profile.html" class="btn">Профиль</a>
+        <div class="header-actions">
+            <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card); cursor: pointer;"></div>
+        </div>
     </header>
 
     <main class="wave-page">
@@ -141,6 +156,30 @@
         import { formatTime } from './js/utils.js';
 
         requireAuth();
+
+        import { isAuthenticated, getCurrentUser } from './js/auth.js';  // если ещё нет
+
+        async function updateHeader() {
+            const loginBtn = document.getElementById('login-btn');
+            const avatar = document.getElementById('user-avatar');
+            if (!loginBtn || !avatar) return;
+            if (isAuthenticated()) {
+                const user = await getCurrentUser().catch(() => null);
+                if (user) {
+                    loginBtn.style.display = 'none';
+                    avatar.style.display = 'flex';
+                    avatar.textContent = user.username.charAt(0).toUpperCase();
+                    avatar.onclick = () => window.location.href = '/frontend/profile.html';
+                } else {
+                    loginBtn.style.display = 'inline-flex';
+                    avatar.style.display = 'none';
+                }
+            } else {
+                loginBtn.style.display = 'inline-flex';
+                avatar.style.display = 'none';
+            }
+        }
+        updateHeader();
 
         const container = document.getElementById('wave-container');
 

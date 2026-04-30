@@ -8,229 +8,150 @@
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/components.css">
     <style>
-        .artist-page {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 40px 24px;
+        .artist-page { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
+        .artist-header { display: flex; gap: 32px; margin-bottom: 48px; }
+        .artist-avatar { width: 250px; height: 250px; border-radius: 50%; background: var(--bg-card); object-fit: cover; flex-shrink: 0; }
+        .artist-info { flex: 1; }
+        .artist-name { font-size: 36px; font-weight: 600; margin-bottom: 8px; }
+        .artist-dates { font-size: 16px; color: var(--text-secondary); margin-bottom: 16px; }
+        .artist-description { font-size: 16px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+        .artist-stats { display: flex; gap: 24px; color: var(--text-secondary); }
+        .artist-actions { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
+        .section-title { font-size: 24px; font-weight: 500; margin-bottom: 16px; color: var(--text-primary); }
+        .albums-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 48px; }
+        .album-card { position: relative; cursor: pointer; }
+        .album-card .delete-album-btn {
+            position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: #ff5c5c; border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 16px; cursor: pointer; display: none; align-items: center; justify-content: center;
         }
-        .artist-header {
-            display: flex;
-            gap: 32px;
-            margin-bottom: 48px;
+        .album-card:hover .delete-album-btn { display: flex; }
+        .tracks-list { background: var(--bg-card); border-radius: var(--radius-lg); padding: 8px 0; margin-bottom: 48px; }
+        .track-item { display: flex; align-items: center; padding: 12px 16px; transition: background 0.2s; cursor: pointer; position: relative; }
+        .track-item:hover { background: rgba(138, 92, 255, 0.08); }
+        .track-index { width: 32px; color: var(--text-secondary); font-size: 14px; }
+        .track-info { flex: 1; }
+        .track-name { font-weight: 500; color: var(--text-primary); }
+        .track-meta { font-size: 14px; color: var(--text-secondary); }
+        .track-duration { color: var(--text-secondary); margin-left: 16px; font-size: 14px; }
+        .track-play-btn, .track-delete-btn {
+            background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 8px; border-radius: 50%; transition: var(--transition); margin-left: 8px;
         }
-        .artist-avatar {
-            width: 250px;
-            height: 250px;
+        .track-play-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
+        .track-delete-btn { color: #ff5c5c; display: none; }
+        .track-item:hover .track-delete-btn { display: block; }
+        .error-message { text-align: center; padding: 60px 20px; color: var(--text-secondary); display: none; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: var(--bg-card); border-radius: var(--radius-lg); padding: 32px; width: 100%; max-width: 500px; }
+        .modal-content h3 { margin-bottom: 20px; }
+        .modal-content .form-group { margin-bottom: 16px; }
+        .modal-content label { color: var(--text-secondary); font-size: 14px; display: block; margin-bottom: 6px; }
+        .modal-content .input, .modal-content select { width: 100%; background: var(--bg-deep); border: 1px solid transparent; border-radius: var(--radius-md); padding: 10px 14px; color: var(--text-primary); font-size: 16px; outline: none; }
+        .modal-content .input:focus, .modal-content select:focus { border-color: var(--accent); }
+        .modal-actions { margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end; }
+        .player-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 180px; background: var(--bg-card); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 20px 32px; display: none; align-items: center; gap: 24px; z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
+        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
+        .player-info { flex: 1; min-width: 200px; }
+        .player-track-name { font-size: 18px; font-weight: 500; }
+        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
+        .player-controls { display: flex; gap: 16px; }
+        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
+        .player-progress { flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px; -webkit-appearance: none; appearance: none; }
+        .player-progress::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
+        .player-actions { display: flex; gap: 16px; margin-left: auto; }
+        .player-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; transition: var(--transition); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .player-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
+        .player-btn.liked { color: var(--accent); }
+        .avatar {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             background: var(--bg-card);
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        .artist-info {
-            flex: 1;
-        }
-        .artist-name {
-            font-size: 36px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-        .artist-dates {
-            font-size: 16px;
-            color: var(--text-secondary);
-            margin-bottom: 16px;
-        }
-        .artist-description {
-            font-size: 16px;
-            color: var(--text-secondary);
-            line-height: 1.6;
-            margin-bottom: 24px;
-        }
-        .artist-stats {
-            display: flex;
-            gap: 24px;
-            color: var(--text-secondary);
-        }
-        .artist-actions {
-            margin-top: 16px;
-        }
-        .section-title {
-            font-size: 24px;
-            font-weight: 500;
-            margin-bottom: 16px;
-            color: var(--text-primary);
-        }
-        .albums-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 48px;
-        }
-        .tracks-list {
-            background: var(--bg-card);
-            border-radius: var(--radius-lg);
-            padding: 8px 0;
-            margin-bottom: 48px;
-        }
-        .track-item {
             display: flex;
             align-items: center;
-            padding: 12px 16px;
-            transition: background 0.2s;
-            cursor: pointer;
-        }
-        .track-item:hover {
-            background: rgba(138, 92, 255, 0.08);
-        }
-        .track-index {
-            width: 32px;
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-        .track-info {
-            flex: 1;
-        }
-        .track-name {
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-        .track-meta {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        .track-duration {
-            color: var(--text-secondary);
-            margin-left: 16px;
-            font-size: 14px;
-        }
-        .track-play-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 18px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 50%;
-            transition: var(--transition);
-            margin-left: 8px;
-        }
-        .track-play-btn:hover {
+            justify-content: center;
+            font-size: 20px;
             color: var(--accent);
-            background: rgba(138,92,255,0.1);
-        }
-        .error-message {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--text-secondary);
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <!-- Хедер -->
     <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
         <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
             U<span style="color: var(--accent);">:</span>V
         </a>
         <div class="header-actions">
             <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
-            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card); cursor: pointer;"></div>
         </div>
     </header>
 
     <main class="artist-page">
         <div id="artist-content"></div>
-        <div id="error-message" class="error-message" style="display: none;"></div>
+        <div id="error-message" class="error-message"></div>
     </main>
 
-    <!-- Глобальный плеер -->
-    <div id="player-bar" class="player-bar" style="display: none;"></div>
-
-    <!-- Инициализация структуры плеера -->
-    <script>
-        (function createPlayerDOM() {
-            const bar = document.getElementById('player-bar');
-            bar.innerHTML = `
-                <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
-                <div class="player-info">
-                    <div id="player-track-name" class="player-track-link">Не выбран трек</div>
-                    <div id="player-artist-name" class="player-artist-name"></div>
-                </div>
-                <div class="player-controls">
-                    <button id="player-play" class="player-btn">▶</button>
-                    <button id="player-next" class="player-btn">⏭</button>
-                </div>
-                <div class="player-progress-container">
-                    <span id="player-current-time" class="player-time">0:00</span>
-                    <input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0">
-                    <span id="player-duration" class="player-time">0:00</span>
-                </div>
-                <div class="player-actions">
-                    <button id="player-like" class="player-btn">❤️</button>
-                    <button id="player-wave" class="player-btn">🌊</button>
-                    <button id="player-expand" class="player-btn">⤢</button>
-                </div>
-            `;
-        })();
-    </script>
-
-    <!-- Стили плеера -->
-    <style>
-        .player-bar {
-            position: fixed;
-            bottom: 0; left: 0; width: 100%; height: 180px;
-            background: var(--bg-card);
-            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-            padding: 20px 32px; display: flex; align-items: center; gap: 24px;
-            z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-        }
-        .player-cover { width: 64px; height: 64px; border-radius: var(--radius-md); object-fit: cover; }
-        .player-info { flex: 1; min-width: 200px; }
-        .player-track-name { font-size: 18px; font-weight: 500; }
-        .player-artist-name { font-size: 14px; color: var(--text-secondary); }
-        .player-controls { display: flex; align-items: center; gap: 16px; }
-        .player-progress-container { display: flex; align-items: center; gap: 12px; width: 400px; }
-        .player-progress {
-            flex: 1; height: 4px; background: rgba(168,160,192,0.3); border-radius: 2px;
-            -webkit-appearance: none; appearance: none;
-        }
-        .player-progress::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-            background: var(--accent); cursor: pointer;
-        }
-        .player-time { font-size: 14px; color: var(--text-secondary); min-width: 40px; }
-        .player-actions { display: flex; gap: 16px; margin-left: auto; }
-        .player-btn {
-            background: none; border: none; color: var(--text-secondary); font-size: 24px;
-            cursor: pointer; transition: var(--transition); width: 40px; height: 40px;
-            display: flex; align-items: center; justify-content: center; border-radius: 50%;
-        }
-        .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
-        .player-btn.liked { color: var(--accent); }
-    </style>
+    <div id="player-bar" class="player-bar"></div>
 
     <script type="module">
         import { isAuthenticated, getCurrentUser } from './js/auth.js';
-        import { player } from './js/player.js';
         import { api } from './js/api.js';
         import { formatTime, generateCoverPlaceholder } from './js/utils.js';
 
+        // инициализация плеера
+        const bar = document.getElementById('player-bar');
+        bar.innerHTML = `
+            <img id="player-cover" class="player-cover" src="https://via.placeholder.com/64/16112A/A8A0C0" alt="cover">
+            <div class="player-info"><div id="player-track-name" class="player-track-link">Не выбран трек</div><div id="player-artist-name" class="player-artist-name"></div></div>
+            <div class="player-controls"><button id="player-play" class="player-btn">▶</button><button id="player-next" class="player-btn">⏭</button></div>
+            <div class="player-progress-container"><span id="player-current-time" class="player-time">0:00</span><input type="range" id="player-progress" class="player-progress" min="0" max="100" value="0"><span id="player-duration" class="player-time">0:00</span></div>
+            <div class="player-actions"><button id="player-like" class="player-btn">❤️</button><button id="player-wave" class="player-btn">🌊</button><button id="player-expand" class="player-btn">⤢</button></div>
+        `;
+        bar.style.display = 'none';
+
+        // Динамический импорт плеера после того, как DOM готов
+        import('./js/player.js').then(module => {
+            window.player = module.player;
+            if (module.player.currentTrack) bar.style.display = 'flex';
+        }).catch(err => {
+            console.warn('Плеер не загрузился, страница продолжит работу', err);
+        });
+
         const params = new URLSearchParams(window.location.search);
         const artistId = params.get('id');
-        const contentDiv = document.getElementById('artist-content');
-        const errorDiv = document.getElementById('error-message');
+        const API_BASE = 'http://localhost:8000/api';
 
-        // Хедер
+        let currentArtist = null;
+        let isMember = false;
+
+        // Функция для отображения ошибки на странице
+        function showError(message) {
+            const errDiv = document.getElementById('error-message');
+            if (errDiv) {
+                errDiv.textContent = message;
+                errDiv.style.display = 'block';
+            }
+        }
+
+        // Обновление хедера (без падения)
         async function updateHeader() {
             const loginBtn = document.getElementById('login-btn');
             const avatar = document.getElementById('user-avatar');
+            if (!loginBtn || !avatar) return;
+
             if (isAuthenticated()) {
-                const user = await getCurrentUser();
+                let user = null;
+                try {
+                    user = await getCurrentUser();
+                } catch (e) {
+                    console.warn('Не удалось получить пользователя', e);
+                }
                 if (user) {
                     loginBtn.style.display = 'none';
                     avatar.style.display = 'flex';
                     avatar.textContent = user.username.charAt(0).toUpperCase();
-                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                    avatar.onclick = () => window.location.href = '/frontend/profile.html';
                 } else {
-                    localStorage.removeItem('access_token');
                     loginBtn.style.display = 'inline-flex';
                     avatar.style.display = 'none';
                 }
@@ -240,47 +161,50 @@
             }
         }
 
-        // Загрузка всех данных
+        // Загрузка данных артиста
         async function loadArtist() {
             if (!artistId) {
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Не указан ID артиста';
+                showError('Не указан ID артиста');
                 return;
             }
+
             try {
-                // Основная информация
                 const artist = await api.get(`/artists/${artistId}`);
-                // Проверяем, лайкнут ли артист
+                currentArtist = artist;
+                isMember = artist.is_member ?? false;
+
                 let isLiked = false;
                 if (isAuthenticated()) {
                     try {
                         const data = await api.get('/users/me/favorites/artist-ids');
                         if (data && data.artist_ids) {
-                            isLiked = data.artist_ids.some(id => id === artistId);
+                            isLiked = data.artist_ids.includes(artistId);
                         }
-                    } catch (e) {
-                        console.warn('Не удалось проверить избранное артиста', e);
-                    }
+                    } catch (e) {}
                 }
-                // Загружаем все треки и альбомы (отсортированные по популярности)
-                const [allTracks, allAlbums] = await Promise.all([
-                    api.get(`/artists/${artistId}/tracks`),
-                    api.get(`/artists/${artistId}/albums`)
+
+                // Загружаем треки и альбомы параллельно, ошибки не должны ломать страницу
+                const [tracks, albums] = await Promise.all([
+                    api.get(`/artists/${artistId}/tracks`).catch(e => []),
+                    api.get(`/artists/${artistId}/albums`).catch(e => [])
                 ]);
-                renderArtist(artist, allTracks, allAlbums, isLiked);
+
+                console.log('Артист загружен:', artist, 'Треки:', tracks, 'Альбомы:', albums);
+                renderArtist(artist, tracks, albums, isLiked);
             } catch (e) {
-                console.error(e);
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = 'Артист не найден';
+                console.error('Ошибка загрузки артиста', e);
+                showError('Не удалось загрузить артиста');
             }
         }
 
-        function renderArtist(artist, tracks, albums, isLiked = false) {
+        function renderArtist(artist, tracks, albums, isLiked) {
+            const container = document.getElementById('artist-content');
+            if (!container) return;
+
             const coverSrc = generateCoverPlaceholder(`${artist.name}${artist.id}`, 250);
             const datesStr = artist.disbandment_date
                 ? `${artist.formation_date} — ${artist.disbandment_date}`
                 : `${artist.formation_date} — настоящее время`;
-            const description = artist.description || '';
             const likeBtnText = isLiked ? '❤️ Убрать лайк' : '❤️ Нравится';
 
             let html = `
@@ -289,99 +213,289 @@
                     <div class="artist-info">
                         <h1 class="artist-name">${artist.name}</h1>
                         <div class="artist-dates">${datesStr}</div>
-                        ${description ? `<p class="artist-description">${description}</p>` : ''}
-                        <div class="artist-stats">
-                            <span id="artist-likes">❤️ ${artist.likes}</span>
-                            <span id="artist-plays">▶ ${artist.plays}</span>
-                        </div>
+                        ${artist.description ? `<p class="artist-description">${artist.description}</p>` : ''}
+                        <div class="artist-stats"><span id="artist-likes">❤️ ${artist.likes}</span><span id="artist-plays">▶ ${artist.plays}</span></div>
                         <div class="artist-actions">
-                            <button class="btn" id="like-artist-btn">${likeBtnText}</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+                            <button class="btn" id="like-artist-btn">${likeBtnText}</button>`;
+            if (isMember) {
+                html += `
+                            <button class="btn" id="edit-artist-btn">✎ Редактировать</button>
+                            <button class="btn" id="create-album-btn">+ Создать альбом</button>
+                            <button class="btn btn-accent" id="upload-track-btn">↑ Загрузить трек</button>
+                            <button class="btn delete-playlist-btn" id="delete-artist-btn">🗑 Удалить артиста</button>`;
+            }
+            html += `</div></div></div>`;
 
-            // Альбомы (если есть)
-            if (albums && albums.length) {
+            // Альбомы
+            if (albums && albums.length > 0) {
                 html += '<h2 class="section-title">Альбомы</h2><div class="albums-grid">';
                 albums.forEach(album => {
-                    const albumCover = generateCoverPlaceholder(`${album.name}${album.id}`, 250);
-                    html += `
-                        <div class="card" data-id="${album.id}" style="cursor: pointer;">
-                            <img class="card-img" src="${albumCover}" alt="${album.name}">
-                            <div class="card-title">${album.name}</div>
-                            <div class="card-subtitle">${album.release_date} · ▶ ${album.plays}</div>
-                        </div>
-                    `;
+                    html += `<div class="card album-card" data-id="${album.id}">
+                        ${isMember ? '<button class="delete-album-btn" title="Удалить альбом">✕</button>' : ''}
+                        <img class="card-img" src="${generateCoverPlaceholder(album.name + album.id, 250)}" alt="${album.name}">
+                        <div class="card-title">${album.name}</div>
+                        <div class="card-subtitle">${album.release_date} · ▶ ${album.plays}</div>
+                    </div>`;
                 });
                 html += '</div>';
             }
 
-            // Все треки
-            if (tracks && tracks.length) {
+            // Треки
+            if (tracks && tracks.length > 0) {
                 html += '<h2 class="section-title">Треки</h2><div class="tracks-list">';
                 tracks.forEach((track, idx) => {
-                    const duration = formatTime(track.duration);
-                    html += `
-                        <div class="track-item" data-id="${track.id}">
-                            <div class="track-index">${idx + 1}</div>
-                            <div class="track-info">
-                                <div class="track-name">${track.name}</div>
-                                <div class="track-meta">▶ ${track.plays} · ❤️ ${track.likes}</div>
-                            </div>
-                            <div class="track-duration">${duration}</div>
-                            <button class="track-play-btn" title="Воспроизвести">▶</button>
-                        </div>
-                    `;
+                    html += `<div class="track-item" data-id="${track.id}">
+                        <div class="track-index">${idx+1}</div>
+                        <div class="track-info"><div class="track-name">${track.name}</div><div class="track-meta">▶ ${track.plays} · ❤️ ${track.likes}</div></div>
+                        <div class="track-duration">${formatTime(track.duration)}</div>
+                        <button class="track-play-btn">▶</button>
+                        ${isMember ? '<button class="track-delete-btn">✕</button>' : ''}
+                    </div>`;
                 });
                 html += '</div>';
+            } else if (!albums || albums.length === 0) {
+                html += '<p class="empty-message">У этого артиста пока нет треков и альбомов.</p>';
             }
 
-            contentDiv.innerHTML = html;
+            container.innerHTML = html;
+            attachEvents(artist, isLiked);
+        }
 
-            // Обработчики альбомов
-            document.querySelectorAll('.card').forEach(card => {
-                card.addEventListener('click', () => {
-                    window.location.href = `/frontend/album.html?id=${card.dataset.id}`;
+        function attachEvents(artist, isLiked) {
+            // Лайк
+            document.getElementById('like-artist-btn')?.addEventListener('click', async () => {
+                const likesSpan = document.getElementById('artist-likes');
+                const btn = document.getElementById('like-artist-btn');
+                try {
+                    await api.post(`/artists/${artist.id}/like`);
+                    btn.textContent = '❤️ Убрать лайк';
+                    likesSpan.textContent = `❤️ ${artist.likes + 1}`;
+                } catch(e) {
+                    if (e.message?.includes('already')) {
+                        await api.delete(`/artists/${artist.id}/like`);
+                        btn.textContent = '❤️ Нравится';
+                        likesSpan.textContent = `❤️ ${Math.max(0, artist.likes - 1)}`;
+                    }
+                }
+            });
+
+            // Альбомы
+            document.querySelectorAll('.album-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('delete-album-btn')) {
+                        e.stopPropagation();
+                        const id = card.dataset.id;
+                        if (confirm('Удалить альбом?')) deleteAlbum(id);
+                    } else {
+                        window.location.href = `/frontend/album.html?id=${card.dataset.id}`;
+                    }
                 });
             });
 
-            // Обработчики треков
+            // Треки
             document.querySelectorAll('.track-item').forEach(item => {
                 const playBtn = item.querySelector('.track-play-btn');
-                const trackId = item.dataset.id;
+                const delBtn = item.querySelector('.track-delete-btn');
                 item.addEventListener('click', (e) => {
-                    if (e.target === playBtn || playBtn.contains(e.target)) return;
-                    window.location.href = `/frontend/track.html?id=${trackId}`;
+                    if (e.target === playBtn || playBtn?.contains(e.target)) return;
+                    if (e.target === delBtn || delBtn?.contains(e.target)) {
+                        e.stopPropagation();
+                        if (confirm('Удалить трек?')) deleteTrack(item.dataset.id);
+                        return;
+                    }
+                    window.location.href = `/frontend/track.html?id=${item.dataset.id}`;
                 });
-                playBtn.addEventListener('click', (e) => {
+                playBtn?.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    player.loadTrack(trackId);
+                    player.loadTrack(item.dataset.id);
+                });
+                delBtn?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (confirm('Удалить трек?')) deleteTrack(item.dataset.id);
                 });
             });
 
-            // Кнопка лайка артиста
-            const likeBtn = document.getElementById('like-artist-btn');
-            if (likeBtn) {
-                likeBtn.addEventListener('click', async () => {
-                    const likesSpan = document.getElementById('artist-likes');
-                    try {
-                        await api.post(`/artists/${artist.id}/like`);
-                        likeBtn.textContent = '❤️ Убрать лайк';
-                        const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || artist.likes);
-                        likesSpan.textContent = `❤️ ${current + 1}`;
-                    } catch (e) {
-                        if (e.message.includes('already')) {
-                            await api.delete(`/artists/${artist.id}/like`);
-                            likeBtn.textContent = '❤️ Нравится';
-                            const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || artist.likes);
-                            likesSpan.textContent = `❤️ ${Math.max(0, current - 1)}`;
-                        }
+            // Кнопки управления (только для member)
+            if (isMember) {
+                document.getElementById('edit-artist-btn')?.addEventListener('click', openEditArtistModal);
+                document.getElementById('create-album-btn')?.addEventListener('click', openCreateAlbumModal);
+                document.getElementById('upload-track-btn')?.addEventListener('click', openUploadTrackModal);
+                document.getElementById('delete-artist-btn')?.addEventListener('click', async () => {
+                    if (confirm('Удалить артиста полностью?')) {
+                        try {
+                            await api.delete(`/artists/${artist.id}`);
+                            window.location.href = '/frontend/index.html';
+                        } catch(e) { alert(e.message); }
                     }
                 });
             }
         }
 
+        async function deleteAlbum(id) {
+            try {
+                await api.delete(`/albums/${id}`);
+                loadArtist();
+            } catch(e) { alert(e.message); }
+        }
+
+        async function deleteTrack(id) {
+            try {
+                await api.delete(`/tracks/${id}`);
+                loadArtist();
+            } catch(e) { alert(e.message); }
+        }
+
+        function showModal(html) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `<div class="modal-content">${html}</div>`;
+            document.body.appendChild(modal);
+            return modal;
+        }
+
+        function openEditArtistModal() {
+            if (!currentArtist) return;
+            const modal = showModal(`
+                <h3>Редактировать артиста</h3>
+                <div class="form-group"><label>Имя</label><input type="text" id="edit-name" class="input" value="${currentArtist.name}"></div>
+                <div class="form-group"><label>Описание</label><textarea id="edit-desc" class="input" rows="3">${currentArtist.description || ''}</textarea></div>
+                <div class="form-group"><label>Дата создания</label><input type="date" id="edit-formation" class="input" value="${currentArtist.formation_date}"></div>
+                <div class="form-group"><label>Дата распада</label><input type="date" id="edit-disband" class="input" value="${currentArtist.disbandment_date || ''}"></div>
+                <div class="modal-actions">
+                    <button class="btn" id="cancel-edit">Отмена</button>
+                    <button class="btn btn-accent" id="save-edit">Сохранить</button>
+                </div>
+            `);
+            document.getElementById('cancel-edit').addEventListener('click', () => modal.remove());
+            document.getElementById('save-edit').addEventListener('click', async () => {
+                const data = {
+                    name: document.getElementById('edit-name').value,
+                    description: document.getElementById('edit-desc').value,
+                    formation_date: document.getElementById('edit-formation').value,
+                    disbandment_date: document.getElementById('edit-disband').value || null
+                };
+                try {
+                    await api.patch(`/artists/${currentArtist.id}`, data);
+                    modal.remove();
+                    loadArtist();
+                } catch(e) { alert(e.message); }
+            });
+        }
+
+        function openCreateAlbumModal() {
+            const modal = showModal(`
+                <h3>Создать альбом</h3>
+                <div class="form-group"><label>Название</label><input type="text" id="album-name" class="input"></div>
+                <div class="form-group"><label>Дата релиза</label><input type="date" id="album-date" class="input"></div>
+                <div class="form-group"><label>Тип альбома</label>
+                    <select id="album-type" class="input"><option value="">Выберите тип</option></select>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn" id="cancel-album">Отмена</button>
+                    <button class="btn btn-accent" id="save-album">Создать</button>
+                </div>
+            `);
+            // Типы альбомов
+            api.get('/albums/types').then(types => {
+                const sel = document.getElementById('album-type');
+                if (Array.isArray(types)) {
+                    types.forEach(t => sel.innerHTML += `<option value="${t.id}">${t.name}</option>`);
+                }
+            }).catch(() => {
+                document.getElementById('album-type').innerHTML = `
+                    <option value="">Не удалось загрузить</option>`;
+            });
+            document.getElementById('cancel-album').addEventListener('click', () => modal.remove());
+            document.getElementById('save-album').addEventListener('click', async () => {
+                const name = document.getElementById('album-name').value;
+                const date = document.getElementById('album-date').value;
+                const typeId = document.getElementById('album-type').value;
+                if (!name || !date || !typeId) return alert('Заполните все поля');
+                try {
+                    await api.post('/albums', { name, release_date: date, album_type_id: typeId, artist_ids: [artistId] });
+                    modal.remove();
+                    loadArtist();
+                } catch(e) { alert(e.message); }
+            });
+        }
+
+        function openUploadTrackModal() {
+            // Загрузим все альбомы артиста (если ещё не загружены)
+            const loadAlbums = api.get(`/artists/${artistId}/albums`).catch(() => []);
+            loadAlbums.then(albums => {
+                const modal = showModal(`
+                    <h3>Загрузить трек</h3>
+                    <div class="form-group"><label>MP3 файл</label><input type="file" id="track-file" accept=".mp3" class="input" style="padding:8px"></div>
+                    <div class="form-group"><label>Название</label><input type="text" id="track-name" class="input"></div>
+                    <div class="form-group"><label>Дата релиза</label><input type="date" id="track-date" class="input"></div>
+                    <div class="form-group">
+                        <label>Альбом</label>
+                        <select id="track-album" class="input">
+                            <option value="">Без альбома</option>
+                        </select>
+                        <div style="margin-top:8px;">
+                            <input type="text" id="album-search" class="input" placeholder="Поиск альбома..." style="display:none;">
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn" id="cancel-track">Отмена</button>
+                        <button class="btn btn-accent" id="save-track">Загрузить</button>
+                    </div>
+                `);
+                const albumSelect = document.getElementById('track-album');
+                const searchInput = document.getElementById('album-search');
+
+                // Заполняем список альбомов
+                function populateAlbumList(filteredAlbums) {
+                    albumSelect.innerHTML = '<option value="">Без альбома</option>';
+                    filteredAlbums.forEach(album => {
+                        albumSelect.innerHTML += `<option value="${album.id}">${album.name}</option>`;
+                    });
+                }
+
+                populateAlbumList(albums);
+
+                // Если альбомов много, показываем поиск
+                if (albums.length > 5) {
+                    searchInput.style.display = 'block';
+                    searchInput.addEventListener('input', () => {
+                        const q = searchInput.value.toLowerCase();
+                        const filtered = albums.filter(a => a.name.toLowerCase().includes(q));
+                        populateAlbumList(filtered);
+                    });
+                }
+
+                document.getElementById('cancel-track').addEventListener('click', () => modal.remove());
+                document.getElementById('save-track').addEventListener('click', async () => {
+                    const fileInput = document.getElementById('track-file');
+                    if (!fileInput.files.length) return alert('Выберите файл');
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    formData.append('name', document.getElementById('track-name').value);
+                    formData.append('release_date', document.getElementById('track-date').value);
+                    formData.append('artist_ids', artistId);
+                    const selectedAlbumId = albumSelect.value;
+                    if (selectedAlbumId) formData.append('album_ids', selectedAlbumId); // один альбом
+                    try {
+                        const token = localStorage.getItem('access_token');
+                        const res = await fetch(`${API_BASE}/tracks`, {
+                            method: 'POST',
+                            headers: token ? {'Authorization': `Bearer ${token}`} : {},
+                            body: formData
+                        });
+                        if (res.ok) {
+                            modal.remove();
+                            loadArtist();
+                        } else {
+                            const err = await res.json();
+                            alert(err.detail || 'Ошибка загрузки');
+                        }
+                    } catch(e) { alert(e.message); }
+                });
+            });
+        }
+
+        // Запуск
         updateHeader();
         loadArtist();
     </script>

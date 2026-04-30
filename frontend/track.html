@@ -160,7 +160,7 @@
         </a>
         <div class="header-actions">
             <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
-            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card); cursor: pointer;"></div>
         </div>
     </header>
 
@@ -247,6 +247,18 @@
         }
         .player-btn:hover { color: var(--accent); background: rgba(138, 92, 255, 0.1); }
         .player-btn.liked { color: var(--accent); }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--accent);
+            cursor: pointer;
+        }
     </style>
 
     <script type="module">
@@ -268,15 +280,21 @@
         async function updateHeader() {
             const loginBtn = document.getElementById('login-btn');
             const avatar = document.getElementById('user-avatar');
+            if (!loginBtn || !avatar) return;
+
             if (isAuthenticated()) {
-                const user = await getCurrentUser();
+                let user = null;
+                try {
+                    user = await getCurrentUser();
+                } catch (e) {
+                    console.warn('Не удалось получить пользователя', e);
+                }
                 if (user) {
                     loginBtn.style.display = 'none';
                     avatar.style.display = 'flex';
                     avatar.textContent = user.username.charAt(0).toUpperCase();
-                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
+                    avatar.onclick = () => window.location.href = '/frontend/profile.html';
                 } else {
-                    localStorage.removeItem('access_token');
                     loginBtn.style.display = 'inline-flex';
                     avatar.style.display = 'none';
                 }

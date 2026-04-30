@@ -54,7 +54,8 @@ class TrackBrief(BaseModel):
 class ArtistResponse(ArtistBrief):
     description: Optional[str]
     albums: List[AlbumBrief] = []
-    popular_tracks: List[TrackBrief] = []   # например, топ-5 по прослушиваниям
+    popular_tracks: List[TrackBrief] = []
+    is_member: bool = False
 
     class Config:
         from_attributes = True

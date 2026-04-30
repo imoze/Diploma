@@ -8,7 +8,7 @@ from typing import Optional, List
 from app.db.session import get_db
 from app.db.models import Users, Album, AlbumTypes, FavAlbums, Artist, Track, ArtistAlbums, AlbumTracks, ArtistTracks, Member, ArtistMembers
 from app.schemas.common import MessageResponse
-from app.schemas.album import AlbumCreate, AlbumUpdate, AlbumResponse
+from app.schemas.album import AlbumCreate, AlbumUpdate, AlbumResponse, AlbumTypeResponse
 from app.core.deps import get_current_member, require_artist_membership_for_album, get_current_user
 
 
@@ -84,6 +84,10 @@ def get_albums(
         query = query.filter(Album.name.ilike(f"%{q}%"))
     albums = query.order_by(Album.likes.desc()).limit(limit).all()
     return [build_album_response(album, db) for album in albums]
+
+@router.get("/types", response_model=list[AlbumTypeResponse])
+def get_album_types(db: Session = Depends(get_db)):
+    return db.query(AlbumTypes).all()
 
 @router.get("/{album_id}", response_model=AlbumResponse)
 def get_album(
@@ -189,26 +193,23 @@ def delete_album(
     album: Album = Depends(require_artist_membership_for_album),
     db: Session = Depends(get_db)
 ):
-    """Удалить альбом (доступно участникам артистов альбома)."""
-    # Проверяем, есть ли треки в альбоме
-    track_count = db.query(AlbumTracks).filter(AlbumTracks.album_id == album_id).count()
-    if track_count > 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete album with existing tracks. Remove tracks first."
-        )
+    """Удалить альбом. Связи с треками удаляются, сами треки остаются."""
+    # Удаляем все связи с треками в этом альбоме
+    track_links = db.query(AlbumTracks).filter(AlbumTracks.album_id == album_id).all()
+    for link in track_links:
+        db.delete(link)
 
-    # 1. Удаляем связи с артистами (artist_albums)
+    # Удаляем связи с артистами (artist_albums)
     artist_links = db.query(ArtistAlbums).filter(ArtistAlbums.album_id == album_id).all()
     for link in artist_links:
         db.delete(link)
-    
-    # 2. Удаляем лайки альбома (fav_albums)
+
+    # Удаляем лайки альбома
     fav_links = db.query(FavAlbums).filter(FavAlbums.album_id == album_id).all()
     for link in fav_links:
         db.delete(link)
-    
-    # 3. Удаляем сам альбом
+
+    # Удаляем сам альбом
     db.delete(album)
     db.commit()
     return

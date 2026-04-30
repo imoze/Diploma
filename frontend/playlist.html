@@ -55,14 +55,28 @@
         .wave-play-btn:hover { color: var(--accent); background: rgba(138,92,255,0.1); }
         .empty-message { text-align: center; padding: 40px; color: var(--text-secondary); }
         .error-message { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--accent);
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <header class="header" style="display: flex; justify-content: space-between; align-items: center; padding: 24px 32px;">
-        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">U<span style="color: var(--accent);">:</span>V</a>
+        <a href="/frontend/index.html" class="logo" style="font-size: 28px; font-weight: 600; color: var(--text-primary); text-decoration: none;">
+            U<span style="color: var(--accent);">:</span>V
+        </a>
         <div class="header-actions">
             <a href="/frontend/login.html" class="btn" id="login-btn" style="display: none;">Войти</a>
-            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card);"></div>
+            <div class="avatar" id="user-avatar" style="display: none; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card); cursor: pointer;"></div>
         </div>
     </header>
     <main class="playlist-page">
@@ -94,16 +108,21 @@
         async function updateHeader() {
             const loginBtn = document.getElementById('login-btn');
             const avatar = document.getElementById('user-avatar');
+            if (!loginBtn || !avatar) return;
+
             if (isAuthenticated()) {
-                const user = await getCurrentUser();
+                let user = null;
+                try {
+                    user = await getCurrentUser();
+                } catch (e) {
+                    console.warn('Не удалось получить пользователя', e);
+                }
                 if (user) {
                     loginBtn.style.display = 'none';
                     avatar.style.display = 'flex';
                     avatar.textContent = user.username.charAt(0).toUpperCase();
-                    avatar.addEventListener('click', () => window.location.href = '/frontend/profile.html');
-                    return user;
+                    avatar.onclick = () => window.location.href = '/frontend/profile.html';
                 } else {
-                    localStorage.removeItem('access_token');
                     loginBtn.style.display = 'inline-flex';
                     avatar.style.display = 'none';
                 }
@@ -111,7 +130,6 @@
                 loginBtn.style.display = 'inline-flex';
                 avatar.style.display = 'none';
             }
-            return null;
         }
 
         async function loadPlaylist() {

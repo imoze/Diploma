@@ -33,6 +33,7 @@ class UserResponse(UserBase):
 class UserProfileResponse(BaseModel):
     id: UUID
     username: str
+    is_member: bool
     is_fav_tracks_public: bool
     is_fav_playlists_public: bool
     is_fav_artists_public: bool
