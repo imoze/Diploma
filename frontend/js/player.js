@@ -13,7 +13,6 @@ class Player {
         // Элементы DOM
         this.bar = document.getElementById('player-bar');
         this.playBtn = document.getElementById('player-play');
-        this.nextBtn = document.getElementById('player-next');
         this.likeBtn = document.getElementById('player-like');
         this.waveBtn = document.getElementById('player-wave');
         this.expandBtn = document.getElementById('player-expand');
@@ -34,7 +33,6 @@ class Player {
 
     initEvents() {
         this.playBtn.addEventListener('click', () => this.togglePlay());
-        this.nextBtn.addEventListener('click', () => this.nextTrack());
         this.likeBtn.addEventListener('click', () => this.toggleLike());
         this.waveBtn.addEventListener('click', () => this.openWaveView());
         this.expandBtn.addEventListener('click', () => this.openFullscreenPlayer());
@@ -60,7 +58,6 @@ class Player {
             this.isPlaying = false;
             this.playBtn.innerHTML = this.getPlayIcon();
         });
-        this.audio.addEventListener('ended', () => this.nextTrack());
 
         this.audio.addEventListener('loadedmetadata', () => {
             const audioDuration = this.audio.duration;
@@ -130,14 +127,6 @@ class Player {
         else this.play();
     }
 
-    nextTrack() {
-        // Пока просто заглушка
-        if (this.queue.length > 0) {
-            const nextId = this.queue.shift();
-            this.loadTrack(nextId);
-        }
-    }
-
     updateProgress() {
         const duration = isFinite(this.audio.duration) && this.audio.duration > 0 
             ? this.audio.duration 
@@ -195,7 +184,6 @@ class Player {
                     </div>
                 </div>
                 <canvas id="wave-canvas" class="wave-canvas"></canvas>
-                <div id="uv-index-display" class="uv-index">—</div>
                 <div class="fullscreen-controls">
                     <div class="progress-container">
                         <span id="fullscreen-current-time">0:00</span>
@@ -204,7 +192,6 @@ class Player {
                     </div>
                     <div class="control-buttons">
                         <button id="fullscreen-play">▶</button>
-                        <button id="fullscreen-next">⏭</button>   <!-- новая кнопка -->
                         <button id="fullscreen-wave-action">🌊 Найти совпадения</button>
                         <button id="fullscreen-like">❤️</button>
                     </div>
@@ -220,7 +207,6 @@ class Player {
         // Привязка событий
         document.getElementById('fullscreen-close').addEventListener('click', () => this.closeFullscreen());
         document.getElementById('fullscreen-play').addEventListener('click', () => this.togglePlay());
-        document.getElementById('fullscreen-next').addEventListener('click', () => this.nextTrack());
         document.getElementById('fullscreen-wave-action').addEventListener('click', () => this.findSimilarTracks());
         document.getElementById('fullscreen-like').addEventListener('click', () => this.toggleLike());
         const flplayBtn = document.getElementById('fullscreen-play');
@@ -290,7 +276,6 @@ class Player {
         
         // Скрываем список похожих треков при открытии
         document.getElementById('similar-tracks-list').style.display = 'none';
-        document.getElementById('uv-index-display').textContent = '—';
     }
 
     closeFullscreen() {
@@ -351,7 +336,6 @@ class Player {
         try {
             const similar = await api.get(`/tracks/${this.currentTrack.id}/similar?limit=10`);
             const maxSimilarity = similar.length ? Math.max(...similar.map(t => t.similarity || 0)) : 0;
-            document.getElementById('uv-index-display').textContent = maxSimilarity ? `UV ${Math.round(maxSimilarity)}` : '—';
 
             const html = similar.map(t => {
                 const artists = t.artists?.map(a => a.name).join(', ') || '';
