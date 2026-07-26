@@ -387,15 +387,15 @@
                 const likesSpan = document.getElementById('track-likes');
                 try {
                     await api.post(`/tracks/${track.id}/like`);
+                    track.likes += 1;
                     likeBtn.textContent = '❤️ Убрать лайк';
-                    const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || track.likes);
-                    likesSpan.textContent = `❤️ ${current + 1}`;
+                    likesSpan.textContent = `❤️ ${track.likes}`;
                 } catch (e) {
-                    if (e.message.includes('already')) {
+                    if (e.message?.includes('already')) {
                         await api.delete(`/tracks/${track.id}/like`);
+                        track.likes -= 1;
                         likeBtn.textContent = '❤️ Нравится';
-                        const current = parseInt(likesSpan.textContent.match(/\d+/)?.[0] || track.likes);
-                        likesSpan.textContent = `❤️ ${Math.max(0, current - 1)}`;
+                        likesSpan.textContent = `❤️ ${track.likes}`;
                     }
                 }
             });

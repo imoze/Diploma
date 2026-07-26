@@ -188,7 +188,6 @@
                             <span id="playlist-likes">❤️ ${playlist.likes}</span>
                         </div>
                         <div class="playlist-actions">
-                            <button class="btn btn-accent" id="play-all-btn">▶ Воспроизвести всё</button>
                             <button class="btn" id="like-playlist-btn">${likeBtnText}</button>
                             <button class="btn" id="wave-playlist-btn">🌊 Волна плейлиста</button>
                             ${isCollaborator ? '<button class="btn" id="edit-toggle-btn">✎ Редактировать</button>' : ''}
@@ -264,11 +263,6 @@
         }
 
         function attachPlaylistEvents(playlist) {
-            const playAllBtn = document.getElementById('play-all-btn');
-            if (playAllBtn && playlist.tracks.length) {
-                playAllBtn.addEventListener('click', () => player.loadTrack(playlist.tracks[0].id));
-            }
-
             document.querySelectorAll('.track-item').forEach(item => {
                 const playBtn = item.querySelector('.track-play-btn');
                 const trackId = item.dataset.id;
@@ -282,23 +276,23 @@
                 });
             });
 
-            const likeBtn = document.getElementById('like-playlist-btn');
-            if (likeBtn) {
-                likeBtn.addEventListener('click', async () => {
-                    const likesSpan = document.getElementById('playlist-likes');
-                    try {
-                        await api.post(`/playlists/${playlist.id}/like`);
-                        likeBtn.textContent = '❤️ Убрать лайк';
-                        likesSpan.textContent = `❤️ ${playlist.likes + 1}`;
-                    } catch (e) {
-                        if (e.message.includes('already')) {
-                            await api.delete(`/playlists/${playlist.id}/like`);
-                            likeBtn.textContent = '❤️ Нравится';
-                            likesSpan.textContent = `❤️ ${Math.max(0, playlist.likes - 1)}`;
-                        }
-                    }
-                });
+            const likeBtn = document.getElementById('like-playlist-btn').addEventListener('click', async () => {
+            const likesSpan = document.getElementById('playlist-likes');
+            const btn = document.getElementById('like-playlist-btn');
+            try {
+                await api.post(`/playlists/${playlist.id}/like`);
+                playlist.likes += 1;
+                btn.textContent = '❤️ Убрать лайк';
+                likesSpan.textContent = `❤️ ${playlist.likes}`;
+            } catch (e) {
+                if (e.message?.includes('already')) {
+                    await api.delete(`/playlists/${playlist.id}/like`);
+                    playlist.likes -= 1;
+                    btn.textContent = '❤️ Нравится';
+                    likesSpan.textContent = `❤️ ${playlist.likes}`;
+                }
             }
+        });
 
             const waveBtn = document.getElementById('wave-playlist-btn');
             if (waveBtn) waveBtn.addEventListener('click', () => loadWave(playlist.id));

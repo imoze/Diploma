@@ -268,13 +268,15 @@
                 const btn = document.getElementById('like-artist-btn');
                 try {
                     await api.post(`/artists/${artist.id}/like`);
+                    artist.likes += 1;
                     btn.textContent = '❤️ Убрать лайк';
-                    likesSpan.textContent = `❤️ ${artist.likes + 1}`;
+                    likesSpan.textContent = `❤️ ${artist.likes}`;
                 } catch(e) {
                     if (e.message?.includes('already')) {
                         await api.delete(`/artists/${artist.id}/like`);
+                        artist.likes -= 1;                      // ← уменьшаем локально
                         btn.textContent = '❤️ Нравится';
-                        likesSpan.textContent = `❤️ ${Math.max(0, artist.likes - 1)}`;
+                        likesSpan.textContent = `❤️ ${artist.likes}`;
                     }
                 }
             });

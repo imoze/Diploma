@@ -199,7 +199,6 @@
                             <span id="album-likes">❤️ ${album.likes}</span>
                         </div>
                         <div class="album-actions">
-                            <button class="btn btn-accent" id="play-all-btn">▶ Воспроизвести всё</button>
                             <button class="btn" id="like-album-btn">${isLiked ? '❤️ Убрать лайк' : '❤️ Нравится'}</button>
                             ${isMember ? '<button class="btn" id="edit-toggle-btn">✎ Редактировать</button>' : ''}
                             ${isMember ? '<button class="btn" id="edit-album-btn" style="display:none;">Изменить данные</button>' : ''}
@@ -236,27 +235,21 @@
         }
 
         function attachAlbumEvents(album, isLiked) {
-            // Воспроизвести всё
-            document.getElementById('play-all-btn')?.addEventListener('click', () => {
-                if (album.tracks.length) {
-                    if (window.player) window.player.loadTrack(album.tracks[0].id);
-                    else console.warn('Плеер еще не загружен');
-                }
-            });
-
             // Лайк альбома
             document.getElementById('like-album-btn')?.addEventListener('click', async () => {
                 const likesSpan = document.getElementById('album-likes');
                 const btn = document.getElementById('like-album-btn');
                 try {
                     await api.post(`/albums/${album.id}/like`);
+                    album.likes += 1;
                     btn.textContent = '❤️ Убрать лайк';
-                    likesSpan.textContent = `❤️ ${album.likes + 1}`;
+                    likesSpan.textContent = `❤️ ${album.likes}`;
                 } catch(e) {
                     if (e.message?.includes('already')) {
                         await api.delete(`/albums/${album.id}/like`);
+                        album.likes -= 1;
                         btn.textContent = '❤️ Нравится';
-                        likesSpan.textContent = `❤️ ${Math.max(0, album.likes - 1)}`;
+                        likesSpan.textContent = `❤️ ${album.likes}`;
                     }
                 }
             });
