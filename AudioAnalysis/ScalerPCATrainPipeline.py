@@ -39,7 +39,6 @@ def TrainScalerPCA(tracks='C:\\0.0.Diploma\\Tracks\\tracks.json'):
             print(f'Analys complete\n{abs(i+1-l)} remaining\n\n')
 
     feature_matrix = np.array(feature_vectors)
-    #print(feature_matrix.shape)
 
 
     scaler = StandardScaler()
@@ -56,20 +55,3 @@ def TrainScalerPCA(tracks='C:\\0.0.Diploma\\Tracks\\tracks.json'):
             'version':1,
             'n_dimensions':n
         }, f)
-
-    '''
-    scaler_loaded = joblib.load('Models/scaler.pkl')
-    pca_loaded = joblib.load('Models/pca.pkl')
-    test_matrix = pca_loaded.transform(scaler_loaded.transform(feature_matrix))
-    print('OK!' if np.allclose(test_matrix, transformed_feature_matrix) else 'FAIL!')
-    '''
-
-
-#TrainScalerPCA()
-'''
-scaler_loaded = joblib.load('C:\\0.0.Diploma\\backend\\models\\scaler.pkl')
-pca_loaded = joblib.load('C:\\0.0.Diploma\\backend\\models\\pca.pkl')
-test_vector1 = pca_loaded.transform(scaler_loaded.transform([ConvertToVector(ExtractAudioFeatures('C:\\0.0.Diploma\\Tracks\\Rock\\Red_Hot_Chili_Peppers\\The_Studio_Album_Collection_1991-2011\\1.mp3'))]))
-test_vector2 = pca_loaded.transform(scaler_loaded.transform([ConvertToVector(ExtractAudioFeatures('C:\\0.0.Diploma\\Tracks\\Rock\\Red_Hot_Chili_Peppers\\The_Studio_Album_Collection_1991-2011\\1.mp3'))]))
-print('OK!' if test_vector1.shape[1] == test_vector2.shape[1] else 'FAIL!')
-'''

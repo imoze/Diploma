@@ -45,12 +45,3 @@ def KeyMode(y, sr):
     chroma_mean = np.sum(chroma_weighted, axis=1) / np.sum(rms)
     key, mode, conf = KrumanslKey(chroma_mean)
     return key, mode
-
-'''
-y, sr = librosa.load("C:\\0.0.Diploma\\AudioAnalysis\\ACDC_-_Back_In_Black_47830042.mp3")
-chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-chroma_mean = np.mean(chroma, axis=1)
-key, mode, confidence = KrumanslKey(chroma_mean)
-print(f"Тональность: {key} {mode}")
-print(f"Уверенность: {confidence:.3f}")
-'''

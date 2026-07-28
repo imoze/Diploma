@@ -1,7 +1,5 @@
 import numpy as np
 
-from AudioAnalysis.AudioFeatures import ExtractAudioFeatures
-
 notes_converting = {'C':0,'C#':1,'D':2,'D#':3,'E':4,'F':5,'F#':6,'G':7,'G#':8,'A':9,'A#':10,'B':11}
 stats = ['mean','median','variance','std_dev','range','IQR','q25','q75','MAD','min','max','p5','p95','skewness','kurtosis','CoV']
 
@@ -40,5 +38,3 @@ def ConvertToVector(AudioFeatures: dict):
     res.append(1 if AudioFeatures['mode'] == 'major' else 0)
 
     return np.array(res, dtype=np.float64)
-
-#print(ConvertToVector(ExtractAudioFeatures('C:\\0.0.Diploma\\Tracks\\ACDC_-_Back_In_Black_47830042.mp3')))

@@ -41,19 +41,3 @@ def ExtractAudioFeatures(track_fp):
         count += 1
 
     return track_params
-
-    '''for i in track_params.keys():
-        if isinstance(track_params[i], list):
-            print(i)
-            for j in range(len(track_params[i])):
-                print(j+1)
-                for k in track_params[i][j].keys():
-                    print(f'    {k}:{track_params[i][j][k]}')
-            print()
-        elif isinstance(track_params[i], dict):
-            print(i)
-            for j in track_params[i].keys():
-                print(f'    {j}:{track_params[i][j]}')
-            print()
-        else:
-            print(i, track_params[i], '\n')'''
