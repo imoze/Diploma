@@ -70,9 +70,11 @@ The frontend is plain HTML, CSS and JavaScript, no framework. The pages cover th
 
 I'll be honest here: the frontend is the part I enjoy least, so it was mostly "vibe-coded" on top of basic HTML/CSS/JS. It does its job — you can see and use everything the backend offers — but it's the most obvious place the project could be improved.
 
+Artist page
 ![Artist page](https://github.com/imoze/Diploma/raw/master/artist.png)
 
-![My wave page](https://github.com/imoze/Diploma/raw/master/wave.png)2
+My wave page
+![My wave page](https://github.com/imoze/Diploma/raw/master/wave.png)
 
 ## How a recommendation is made, end to end
 
